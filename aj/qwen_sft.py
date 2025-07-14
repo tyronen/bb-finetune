@@ -4,7 +4,7 @@ from torch.utils.data import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, Trainer, default_data_collator
 import random
 import numpy as np
-from peft import get_peft_model, LoraConfig, TaskType, prepare_model_for_kbit_training, PeftModel
+from peft import get_peft_model, LoraConfig, TaskType, prepare_model_for_kbit_training, PeftModel, PeftConfig
 import evaluate
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
