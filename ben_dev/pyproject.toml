@@ -35,8 +35,7 @@ dependencies = [
   "torchmetrics",
 
   # deep learning: JAX + friends
-  "jax>=0.4.5",
-  "jaxlib>=0.4.5",
+  "jax[cuda12]>=0.4.5", # will also pull jaxlib from the cuda version
   "flax",
   "optax",
 

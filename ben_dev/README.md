@@ -11,13 +11,17 @@
 
 ## 1. Create & activate the environment
 
-Run:
+1. Run:
 
 ```bash
 cd ~/mlx/week6/bb-finetune/ben_dev
 uv venv .venv --python=python3.10
 source .venv/bin/activate
 ```
+2. Now point pip to the cuda wheels for jax:
+    ```
+    export PIP_EXTRA_INDEX_URL=https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+    ```
 
 ---
 
@@ -31,13 +35,13 @@ source .venv/bin/activate
    # Sync the environment to match the lock file
    uv pip sync uv.lock
    ```
-2. Now the `.venv` has all required packages.
-3. To check torch and jax installed:
+
+Now the `.venv` has all required packages.
+
+2. To check torch and jax installed:
     ```
     python - << EOF
-    import torch, jax
-    print("Torch:",    torch.__version__)
-    print("JAX:",      jax.__version__)
+    import jax; print(jax.__version__, jax.devices())
     EOF
     ```
 > **Tip**: Whenever you add new dependancies (see 5 below) to the `pyproject.toml`, rerun these commands to refresh `uv.lock` and reinstall.
