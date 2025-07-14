@@ -78,8 +78,9 @@ def evaluate_model(model, val_loader, tokenizer, rouge, device, max_new_tokens=1
     model.eval()
     predictions = []
     references = []
+    iterator = enumerate(val_loader)
     with torch.no_grad():
-        for i, batch in enumerate(val_loader):
+        for i, batch in tqdm(enumerate(val_loader), total=len(val_loader), desc="Evaluating", leave=False):
             input_ids = batch["input_ids"].to(device)
             attn_mask = batch["attention_mask"].to(device)
             labels = batch["labels"].to(device)
@@ -131,7 +132,7 @@ for name, param in model.named_parameters():
 # Load dataset (e.g., CarperAI TL;DR)
 data_path = "CarperAI/openai_summarize_tldr"
 dataset = load_dataset(data_path, split="train")
-val_dataset = load_dataset(data_path, split="valid")
+val_dataset = load_dataset(data_path, split="valid[:2000]")
 
 # Pre-tokenize dataset
 tokenized_train_dataset = dataset.map(tokenize_fn)
@@ -151,9 +152,10 @@ WEIGHT_DECAY = 0.01
 NUM_EPOCHS = 2
 LOG_INTERVAL = 100
 EVAL_INTERVAL = 500
+EVAL_BATCH_SIZE = 1
 
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, persistent_workers=PERSISTENT_WORKERS, prefetch_factor=PREFETCH_FACTOR)
-val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, persistent_workers=PERSISTENT_WORKERS, prefetch_factor=PREFETCH_FACTOR)
+val_loader = DataLoader(val_dataset, batch_size=EVAL_BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, persistent_workers=PERSISTENT_WORKERS, prefetch_factor=PREFETCH_FACTOR)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = model.to(device)
@@ -165,6 +167,7 @@ optimizer = optim.AdamW(lora_params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
 TOTAL_STEPS = NUM_EPOCHS * len(train_loader)
 WARMUP_STEPS = int(0.06 * TOTAL_STEPS)
 OPTIMIZER_STEPS = 0
+MAX_STEPS = 3000
 
 scheduler = get_linear_schedule_with_warmup(
     optimizer,
@@ -175,8 +178,11 @@ scheduler = get_linear_schedule_with_warmup(
 model.train()
 
 for epoch in range(NUM_EPOCHS):
-    pbar = tqdm(enumerate(train_loader), total=len(train_loader))
+    pbar = tqdm(enumerate(train_loader), total=MAX_STEPS)
     for step, batch in pbar:
+        if OPTIMIZER_STEPS >= MAX_STEPS:
+            break
+
         optimizer.zero_grad()
         input_ids = batch["input_ids"].to(device)
         attn_mask = batch["attention_mask"].to(device)
@@ -189,13 +195,13 @@ for epoch in range(NUM_EPOCHS):
         if 'scheduler' in locals():
             scheduler.step()
 
-        optimizer_steps += 1
+        OPTIMIZER_STEPS += 1
 
-        if optimizer_steps % EVAL_INTERVAL == 0:
+        if OPTIMIZER_STEPS % EVAL_INTERVAL == 0:
             rouge_scores = evaluate_model(
-                model, val_loader, tokenizer, rouge, device, max_new_tokens=100, num_batches=20  # eval on 20 batches for speed
+                model, val_loader, tokenizer, rouge, device, max_new_tokens=100, num_batches=None 
             )
-            print(f"Step {optimizer_steps} | Loss: {loss.item():.4f} | ROUGE: {rouge_scores}")
+            print(f"Step {OPTIMIZER_STEPS} | Loss: {loss.item():.4f} | ROUGE: {rouge_scores}")
         
         if step % LOG_INTERVAL == 0:
             pbar.set_description(f"Epoch {epoch} Step {step} Loss {loss.item():.4f}")
