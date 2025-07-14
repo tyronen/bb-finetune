@@ -1,0 +1,24 @@
+[project]
+# For use on laptop only. Do not use on Computa; use requirements.txt
+name = "bb-finetune"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "accelerate>=1.8.1",
+    "bert-score>=0.3.13",
+    "black>=25.1.0",
+    "datasets>=3.6.0",
+    "evaluate>=0.4.5",
+    "hf-transfer>=0.1.9",
+    "matplotlib>=3.10.3",
+    "notebook>=7.4.3",
+    "numpy==1.26.3",
+    "peft>=0.16.0",
+    "rouge-score>=0.1.2",
+    "torch==2.4.1",
+    "tqdm>=4.67.1",
+    "transformers>=4.53.0",
+    "wandb>=0.20.1",
+]

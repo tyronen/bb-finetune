@@ -1,0 +1,11 @@
+accelerate>=1.8.1
+bert_score>=0.3.13
+bitsandbytes
+datasets>=3.6.0
+evaluate>=0.4.5
+pandas
+peft>=0.16.0
+rouge_score>=0.1.2
+tqdm>=4.67.1
+transformers>=4.53.0
+wandb>=0.20.1
