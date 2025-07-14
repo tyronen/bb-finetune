@@ -5,7 +5,7 @@
 cp ~/.env .env
 set -a; source .env; set +a
 
-mkdir data
+mkdir -p data
 
 source $HOME/.local/bin/env
 if [[ -n "$SSH_CONNECTION" && -d /workspace ]]; then

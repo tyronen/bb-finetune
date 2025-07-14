@@ -3,6 +3,8 @@ bert_score>=0.3.13
 bitsandbytes
 datasets>=3.6.0
 evaluate>=0.4.5
+flash_attn>=2.8.1
+hf-transfer>=0.1.9
 pandas>=2.3.1
 peft>=0.16.0
 rouge_score>=0.1.2
