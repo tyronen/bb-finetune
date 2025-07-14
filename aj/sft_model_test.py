@@ -1,6 +1,8 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel, PeftConfig
 import torch
+from datasets import load_dataset
+import os
 
 # --- Load tokenizer and dataset ---
 model_name = "Qwen/Qwen3-0.6B-Base"
@@ -20,16 +22,25 @@ target_summary = dataset[0]["label"]
 inputs = tokenizer(input_text, return_tensors="pt", padding=True, truncation=True, max_length=550)
 inputs = {k: v.to(device) for k, v in inputs.items()}
 
-# --- Load SFT (PEFT) model ---
-sft_model_dir = "./qwen-sft-checkpoint"  # Change if you saved elsewhere
-
-peft_config = PeftConfig.from_pretrained(sft_model_dir)
-base_model = AutoModelForCausalLM.from_pretrained(peft_config.base_model_name_or_path, trust_remote_code=True)
-sft_model = PeftModel.from_pretrained(base_model, sft_model_dir)
-sft_model = sft_model.to(device)
-sft_model.eval()
+# --- Try loading merged model first ---
+merged_model_dir = "./qwen-sft-checkpoint/merged"
+if os.path.exists(os.path.join(merged_model_dir, "model.safetensors")):
+    print("Using merged SFT model for inference.")
+    sft_model = AutoModelForCausalLM.from_pretrained(merged_model_dir, trust_remote_code=True)
+    sft_model = sft_model.to(device)
+    sft_model.eval()
+else:
+    print("Merged model not found. Falling back to PEFT LoRA adapter weights.")
+    from peft import PeftModel, PeftConfig
+    sft_model_dir = "./qwen-sft-checkpoint/checkpoint-1500"
+    peft_config = PeftConfig.from_pretrained(sft_model_dir)
+    base_model = AutoModelForCausalLM.from_pretrained(peft_config.base_model_name_or_path, trust_remote_code=True)
+    sft_model = PeftModel.from_pretrained(base_model, sft_model_dir)
+    sft_model = sft_model.to(device)
+    sft_model.eval()
 
 # --- Load Base model (no SFT) ---
+base_model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True)
 base_model = base_model.to(device)
 base_model.eval()
 
@@ -37,7 +48,7 @@ base_model.eval()
 with torch.no_grad():
     sft_outputs = sft_model.generate(
         **inputs,
-        max_new_tokens=100,
+        max_new_tokens=200,
         do_sample=False,
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
@@ -48,7 +59,7 @@ with torch.no_grad():
 with torch.no_grad():
     base_outputs = base_model.generate(
         **inputs,
-        max_new_tokens=100,
+        max_new_tokens=200,
         do_sample=False,
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
