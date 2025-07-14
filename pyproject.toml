@@ -15,6 +15,7 @@ dependencies = [
     "matplotlib>=3.10.3",
     "notebook>=7.4.3",
     "numpy==1.26.3",
+    "pandas>=2.3.1",
     "peft>=0.16.0",
     "rouge-score>=0.1.2",
     "torch==2.4.1",
