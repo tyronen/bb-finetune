@@ -1,0 +1,53 @@
+[project]
+name = "jax-torch-uv-env"
+version = "0.1.0"
+description = "Jax and torch uv env"
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+  # core data & utils
+  "numpy<2",
+  "pandas",
+  "scipy",
+  "scikit-learn",
+  "tqdm",
+  "python-dotenv",
+  "ipykernel",
+
+  # plotting & viz
+  "matplotlib>=3.10.3",
+  "seaborn>=0.13.2",
+
+  # Hugging Face
+  "transformers>=4.33.0",
+  "datasets",
+  "evaluate>=0.4.4",
+  "accelerate",
+
+  # experiment tracking
+  "wandb",
+
+  # deep learning: PyTorch
+  "torch>=2.0.1",
+  "torchvision",
+  "torchaudio",
+  "torchmetrics",
+
+  # deep learning: JAX + friends
+  "jax>=0.4.5",
+  "jaxlib>=0.4.5",
+  "flax",
+  "optax",
+
+  # 8‑bit & speedups (optional)
+  "bitsandbytes",
+
+  # serving / UI
+  "fastapi",
+  "uvicorn",
+  "gradio>=5.35.0",
+
+  # testing
+  "pytest>=8.4.1",
+]
