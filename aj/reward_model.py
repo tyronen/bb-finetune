@@ -1,44 +1,85 @@
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from trl import AutoModelForSequenceClassificationWithValueHead, RewardTrainer
+from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments
+from trl import AutoModelForCausalLMWithValueHead, RewardTrainer, RewardConfig
 from datasets import load_dataset
 
-# 1. Load tokenizer and SFT model (already merged)
-tokenizer = AutoTokenizer.from_pretrained('path/to/your/sft-model')
-sft_model = AutoModelForCausalLM.from_pretrained('path/to/your/sft-model')
+# Define accuracy metric
+def compute_reward_accuracy(eval_preds):
+    # eval_preds is a tuple: (scores, _)
+    # scores: shape (batch_size, 2) or two separate arrays
+    chosen_scores, rejected_scores = eval_preds
+    accuracy = (chosen_scores > rejected_scores).mean()
+    return {"accuracy": accuracy}
 
-# 2. Add value head
-reward_model = AutoModelForSequenceClassificationWithValueHead.from_pretrained(sft_model)
 
-# 3. Prepare dataset
-dataset = load_dataset("CarperAI/openai_summarize_comparisons", split="train")
+def tokenize_pair(batch):
+    chosen_list = [p + c for p, c in zip(batch["prompt"], batch["chosen"])]
+    rejected_list = [p + r for p, r in zip(batch["prompt"], batch["rejected"])]
+    tok_c = tokenizer(chosen_list, truncation=True, padding="max_length", max_length=512)
+    tok_r = tokenizer(rejected_list, truncation=True, padding="max_length", max_length=512)
+    return {
+        "input_ids_chosen": tok_c["input_ids"],
+        "attention_mask_chosen": tok_c["attention_mask"],
+        "input_ids_rejected": tok_r["input_ids"],
+        "attention_mask_rejected": tok_r["attention_mask"],
+    }
 
-def preprocess(batch):
-    prompt = batch["prompt"]
-    chosen = batch["chosen"]
-    rejected = batch["rejected"]
-    return {"prompt": prompt, "chosen": chosen, "rejected": rejected}
 
-dataset = dataset.map(preprocess)
 
-training_args = TrainingArguments(
+model_path = "./qwen-sft-checkpoint/merged"
+tokenizer_path = "./qwen-sft-checkpoint/checkpoint-3000"
+
+# 1. Load tokenizer and model (with value head)
+tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+reward_model = AutoModelForCausalLMWithValueHead.from_pretrained(model_path)
+
+# 3. Prepare train_dataset
+train_dataset = load_dataset("CarperAI/openai_summarize_comparisons", split="train")
+val_dataset = load_dataset("CarperAI/openai_summarize_comparisons", split="valid1[:2000]")
+
+train_dataset = train_dataset.map(tokenize_pair, batched=True)
+val_dataset   = val_dataset.map(tokenize_pair, batched=True)
+
+for param in reward_model.parameters():
+    param.requires_grad = False
+
+for param in reward_model.v_head.parameters():
+    param.requires_grad = True
+
+def print_trainable_params(model):
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total = sum(p.numel() for p in model.parameters())
+    print(f"Trainable params: {trainable} / {total} ({100 * trainable / total:.2f}%)")
+    
+print_trainable_params(reward_model)
+
+# Fix for TRL's RewardTrainer bug
+reward_model.warnings_issued = {}
+
+reward_config = RewardConfig(
     output_dir="./reward_model_output",
-    per_device_train_batch_size=4,
-    num_train_epochs=1,
-    gradient_accumulation_steps=2,
-    learning_rate=1e-5,
-    fp16=True,
-    logging_steps=10,
+    eval_strategy="steps",
+    eval_steps=500,
     save_steps=1000,
-    save_total_limit=2,
+    load_best_model_at_end=True,
+    learning_rate=1e-5,
+    per_device_train_batch_size=4,
+    per_device_eval_batch_size=1,
+    gradient_accumulation_steps=4,
+    num_train_epochs=1,
+    fp16=True,
+    logging_steps=50,
+    report_to="none",
     remove_unused_columns=False,
 )
 
 # 4. Train using RewardTrainer (from TRL)
 trainer = RewardTrainer(
     model=reward_model,
-    args=training_args,
-    train_dataset=dataset,
-    tokenizer=tokenizer,
+    args=reward_config,
+    train_dataset=train_dataset,
+    eval_dataset=val_dataset,
+    compute_metrics=compute_reward_accuracy,
+    processing_class=tokenizer,
 )
 
 trainer.train()
