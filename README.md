@@ -23,4 +23,11 @@ ssh mlx
 source ssh.sh
 ```
 
-Have your IDE rsync your Git repo on your laptop to `mlx:/workspace/bb-finetune`. Then you can run `source setup.sh` on that directory on the GPU. No need to git pull on GPU!
+Have your IDE rsync your Git repo on your laptop to `mlx:/workspace/bb-finetune`. Then you can run `source setup.sh` on
+that directory on the GPU. No need to git pull on GPU!
+
+## Launching the script
+
+```
+accelerate launch --mixed_precision bf16 week6.py
+```

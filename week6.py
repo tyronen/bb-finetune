@@ -10,8 +10,9 @@ from torch.utils.data import Dataset
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
-    TrainingArguments,
-    Trainer,
+    EarlyStoppingCallback,
+    Seq2SeqTrainingArguments,
+    Seq2SeqTrainer,
     default_data_collator,
 )
 
@@ -54,6 +55,12 @@ def set_seed(seed_val=42):
     torch.cuda.manual_seed_all(seed_val)
 
 
+def preprocess_logits_for_metrics(logits, labels):
+    if isinstance(logits, tuple):
+        logits = logits[0]
+    return logits.argmax(dim=-1)
+
+
 def main():
     device = utils.get_device()
     tokenizer = AutoTokenizer.from_pretrained(BASE)
@@ -86,8 +93,7 @@ def main():
         labels = tokenizer.batch_decode(eval_preds.label_ids, skip_special_tokens=True)
         return rouge.compute(predictions=preds, references=labels)
 
-    training_args = TrainingArguments(
-        auto_find_batch_size=True,
+    training_args = Seq2SeqTrainingArguments(
         adam_beta1=0.9,
         adam_beta2=0.95,
         bf16=True,
@@ -95,22 +101,23 @@ def main():
         dataloader_persistent_workers=True,
         dataloader_pin_memory=True,
         eval_accumulation_steps=1,
+        eval_strategy="steps",
         eval_steps=500,
-        eval_strategy="epoch",
         gradient_accumulation_steps=1,
-        learning_rate=1e-5,
+        learning_rate=3e-5,
         load_best_model_at_end=True,
         log_level="info",
         logging_steps=50,
-        max_steps=9000,
-        num_train_epochs=5,
-        optim="adamw_torch_fused",  # ❷ fused optimiser
+        lr_scheduler_type="cosine",
+        max_steps=4000,
+        optim="adamw_torch_fused",  # fused optimiser
         output_dir=OUTPUT_DIR,
-        per_device_eval_batch_size=1,
-        per_device_train_batch_size=16,
+        per_device_eval_batch_size=16,
+        per_device_train_batch_size=8,
+        predict_with_generate=True,
         report_to="wandb",
         save_steps=1000,
-        save_strategy="epoch",
+        save_strategy="steps",
         warmup_steps=100,
     )
 
@@ -127,15 +134,22 @@ def main():
 
     wandb.init(entity="mlx-institute", project="sft")
 
-    trainer = Trainer(
+    trainer = Seq2SeqTrainer(
         model=model,
         args=training_args,
+        callbacks=[
+            EarlyStoppingCallback(
+                early_stopping_patience=3,  # stop after 3 idle epochs
+                early_stopping_threshold=0.001,  # needs ≤0.1 % val-loss improvement
+            )
+        ],
         train_dataset=train_dataset,
         eval_dataset=dev_dataset,
         data_collator=default_data_collator,
         compute_metrics=compute_metrics,
+        # preprocess_logits_for_metrics=preprocess_logits_for_metrics,
     )
-
+    trainer._gen_kwargs = {"max_new_tokens": 128}
     trainer.train()
     trainer.save_model(OUTPUT_DIR)
 
