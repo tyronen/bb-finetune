@@ -54,7 +54,7 @@ eval_batch_size = 1
 eval_steps = 500
 max_input_length = 550
 save_steps = 1000
-num_train_epochs = 1
+num_train_epochs = 2
 
 set_seed(42)
 
@@ -142,9 +142,8 @@ training_args = TrainingArguments(
     warmup_steps=100,
     eval_steps=eval_steps,
     save_steps=save_steps,
-    max_steps=1500,  # Optional: control total training steps
+    max_steps=3000,  # Optional: control total training steps
     load_best_model_at_end=True,
-    warmup_steps=100,
     logging_steps=50,
     report_to="none",  # disable W&B or others unless configured
     label_names=["labels"],
