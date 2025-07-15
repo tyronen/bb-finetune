@@ -3,6 +3,12 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments
 from trl import AutoModelForCausalLMWithValueHead, RewardTrainer, RewardConfig
 from datasets import load_dataset
 import torch
+import os
+
+
+MODEL_SAVE_PATH = "reward-model-checkpoint"
+os.makedirs(MODEL_SAVE_PATH, exist_ok=True)
+
 
 class RewardModelWithDictOutput(AutoModelForCausalLMWithValueHead):
     def forward(self, input_ids=None, attention_mask=None, **kwargs):
@@ -106,3 +112,15 @@ trainer = RewardModelTrainer(
 )
 
 trainer.train()
+
+
+# Save the reward model (including value head) as a HuggingFace model
+reward_model.base_model.save_pretrained(MODEL_SAVE_PATH)
+reward_model.value_head.cpu()  # Move to CPU to avoid DEVICE mismatch
+
+# Save the value head weights separately if needed (HF doesn't handle custom heads natively)
+torch.save(reward_model.value_head.state_dict(), os.path.join(MODEL_SAVE_PATH, "value_head.pt"))
+
+# Save the tokenizer
+tokenizer.save_pretrained(MODEL_SAVE_PATH)
+print(f"Model and tokenizer saved to {MODEL_SAVE_PATH}/")
