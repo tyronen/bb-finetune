@@ -112,54 +112,25 @@ class QwenRewardModel(nn.Module):
         hidden_states = model_outputs.hidden_states[-1]
 
         rewards = self.v_head(hidden_states).squeeze(-1)
-        chosen_end_scores = []
-        rejected_end_scores = []
 
         # Split the inputs and rewards into two parts, chosen and rejected
         assert len(input_ids.shape) == 2
         bs = input_ids.shape[0] // 2
-        chosen = input_ids[:bs]
-        rejected = input_ids[bs:]
-        chosen_rewards = rewards[:bs]
-        rejected_rewards = rewards[bs:]
 
-        loss = 0
-        for i in range(bs):
-            if torch.all(torch.eq(chosen[i], rejected[i])).item():
-                c_inds = (chosen[i] == self.PAD_ID).nonzero()
-                c_ind = c_inds[0].item() if len(c_inds) > 0 else chosen.shape[1]
-                chosen_end_scores.append(chosen_rewards[i, c_ind - 1])
-                inference = True
-                continue
+        chosen_mask = attention_mask[:bs]
+        rejected_mask = attention_mask[bs:]
 
-            # Check if there is any padding otherwise take length of sequence
-            c_inds = (chosen[i] == self.PAD_ID).nonzero()
-            c_ind = c_inds[0].item() if len(c_inds) > 0 else chosen.shape[1]
-            r_inds = (rejected[i] == self.PAD_ID).nonzero()
-            r_ind = r_inds[0].item() if len(r_inds) > 0 else rejected.shape[1]
-            end_ind = max(c_ind, r_ind)
+        chosen_lengths = chosen_mask.sum(dim=1) - 1
+        rejected_lengths = rejected_mask.sum(dim=1) - 1
 
-            # Retrieve first index where trajectories diverge
-            divergence_ind = (chosen[i] != rejected[i]).nonzero()[0]
-            assert divergence_ind > 0
+        # Get end rewards efficiently (no loops!)
+        batch_indices = torch.arange(bs, device=input_ids.device)
+        chosen_end_scores = rewards[batch_indices, chosen_lengths]
+        rejected_end_scores = rewards[batch_indices + bs, rejected_lengths]
 
-            # Index into the correct rewards
-            c_truncated_reward = chosen_rewards[i][divergence_ind:end_ind]
-            r_truncated_reward = rejected_rewards[i][divergence_ind:end_ind]
-
-            # Append the last rewards to the list of end scores
-            chosen_end_scores.append(c_truncated_reward[-1])
-            rejected_end_scores.append(r_truncated_reward[-1])
-
-            # Compute loss based on truncated rewards (ignore padding)
-            loss += -torch.log(
-                torch.sigmoid(c_truncated_reward - r_truncated_reward)
-            ).mean()
-        loss = loss / bs
-
-        chosen_end_scores = torch.stack(chosen_end_scores)
-        rejected_end_scores = torch.stack(rejected_end_scores)
-
+        loss = -torch.nn.functional.logsigmoid(
+            chosen_end_scores - rejected_end_scores
+        ).mean()
         return {
             "loss": loss,
             "chosen_end_scores": chosen_end_scores,
@@ -213,29 +184,31 @@ def main():
 
     training_args = TrainingArguments(
         bf16=True,
-        dataloader_num_workers=8,
+        dataloader_num_workers=4,
         dataloader_persistent_workers=True,
         dataloader_pin_memory=True,
         eval_accumulation_steps=1,
         eval_steps=100,
         eval_strategy="steps",
-        gradient_accumulation_steps=4,
+        gradient_accumulation_steps=8,
         learning_rate=1e-5,
         logging_steps=10,
-        num_train_epochs=1,
+        max_steps=200,
         output_dir=utils.REWARD_DIR,
-        per_device_eval_batch_size=4,
-        per_device_train_batch_size=4,
+        per_device_eval_batch_size=2,
+        per_device_train_batch_size=2,
+        remove_unused_columns=False,
         report_to="wandb",
-        save_steps=500,
-        save_strategy="steps",
-        save_total_limit=1,
+        save_steps=0,
+        save_strategy="no",
         warmup_steps=100,
     )
 
     # Initialize the reward model from the (supervised) fine-tuned Qwen
 
-    model = AutoModelForCausalLM.from_pretrained(utils.SFT_DIR)
+    model = AutoModelForCausalLM.from_pretrained(
+        utils.SFT_DIR, torch_dtype=torch.bfloat16
+    )
     lora_cfg = LoraConfig(
         r=8,  # rank of LoRA matrices
         lora_alpha=32,
@@ -246,6 +219,7 @@ def main():
     )
 
     model = get_peft_model(model, lora_cfg)
+    model.gradient_checkpointing_enable()
     model = QwenRewardModel(model)
     model.to(device)
 
@@ -254,7 +228,7 @@ def main():
         tokenizer, "train_pairwise_dataset.pt", "train"
     )
     val_dataset = cache_pairwise_dataset(tokenizer, "val_pairwise_dataset.pt", "test")
-    val_dataset = Subset(val_dataset, range(500))
+    val_dataset = Subset(val_dataset, range(20))
     # Create the collator to gather batches of pairwise comparisons
     data_collator = DataCollatorReward()
 
@@ -267,8 +241,14 @@ def main():
         data_collator=data_collator,
     )
     trainer.train()
-    model = model.merge_and_unload()
-    model.save_pretrained(utils.REWARD_DIR)
+    # Merge LoRA into base
+    merged_model = model.model.merge_and_unload()
+
+    # (Optional) Save the reward head weights if needed
+    torch.save(model.v_head.state_dict(), os.path.join(utils.REWARD_DIR, "v_head.pt"))
+
+    # Save the merged base model and tokenizer
+    merged_model.save_pretrained(utils.REWARD_DIR)
     tokenizer.save_pretrained(utils.REWARD_DIR)
     wandb.finish(0)
 
