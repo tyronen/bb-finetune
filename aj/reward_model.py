@@ -9,7 +9,7 @@ import numpy as np
 
 MODEL_PATH = "./qwen-sft-checkpoint/merged"
 TOKENIZER_PATH = "./qwen-sft-checkpoint/checkpoint-3000"
-SAVE_PATH = "reward-model-checkpoint"
+SAVE_PATH = "qwen-reward-model-checkpoint"
 os.makedirs(SAVE_PATH, exist_ok=True)
 
 
