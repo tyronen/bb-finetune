@@ -32,7 +32,7 @@ if os.path.exists(os.path.join(merged_model_dir, "model.safetensors")):
 else:
     print("Merged model not found. Falling back to PEFT LoRA adapter weights.")
     from peft import PeftModel, PeftConfig
-    sft_model_dir = "./qwen-sft-checkpoint/checkpoint-1500"
+    sft_model_dir = "./qwen-sft-checkpoint/checkpoint-3000"
     peft_config = PeftConfig.from_pretrained(sft_model_dir)
     base_model = AutoModelForCausalLM.from_pretrained(peft_config.base_model_name_or_path, trust_remote_code=True)
     sft_model = PeftModel.from_pretrained(base_model, sft_model_dir)

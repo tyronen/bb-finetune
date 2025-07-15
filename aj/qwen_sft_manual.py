@@ -61,6 +61,7 @@ def add_lora_to_model(model, r=8, alpha=16, dropout=0.05):
                 setattr(parent, name.split('.')[-1], lora_linear)
     return model
 
+
 def tokenize_fn(sample):
     txt = sample["prompt"] + sample["label"]
     enc = tokenizer(
@@ -96,7 +97,7 @@ def evaluate_model(model, val_loader, tokenizer, rouge, device, max_new_tokens=1
             )
             # Remove prompt from output
             pred_str = tokenizer.batch_decode(
-                [gen[seq.shape[1]:] for gen, seq in zip(generated, input_ids)],
+                [gen[seq.size(0):] for gen, seq in zip(generated, input_ids)],
                 skip_special_tokens=True
             )
             label_str = tokenizer.batch_decode(
@@ -142,8 +143,8 @@ tokenized_val_dataset = val_dataset.map(tokenize_fn)
 train_dataset = TLDRDataset(tokenized_train_dataset)
 val_dataset = TLDRDataset(tokenized_val_dataset)
 
-NUM_WORKERS = 16   # Try 8, 16, or even 24 if CPU usage/RAM is ok
-BATCH_SIZE = 4     # Or higher if your GPU has VRAM to spare
+NUM_WORKERS = 4   # Try 8, 16, or even 24 if CPU usage/RAM is ok
+BATCH_SIZE = 2     # Or higher if your GPU has VRAM to spare
 PIN_MEMORY = True
 PERSISTENT_WORKERS = True
 PREFETCH_FACTOR = 4

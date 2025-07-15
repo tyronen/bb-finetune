@@ -1,47 +1,28 @@
 
-from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments
-from trl import AutoModelForCausalLMWithValueHead, RewardTrainer, RewardConfig
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from trl import RewardTrainer, RewardConfig
 from datasets import load_dataset
 import torch
 import os
+import numpy as np
 
 
-MODEL_SAVE_PATH = "reward-model-checkpoint"
-os.makedirs(MODEL_SAVE_PATH, exist_ok=True)
+MODEL_PATH = "./qwen-sft-checkpoint/merged"
+TOKENIZER_PATH = "./qwen-sft-checkpoint/checkpoint-3000"
+SAVE_PATH = "reward-model-checkpoint"
+os.makedirs(SAVE_PATH, exist_ok=True)
 
-
-class RewardModelWithDictOutput(AutoModelForCausalLMWithValueHead):
-    def forward(self, input_ids=None, attention_mask=None, **kwargs):
-        # Call the parent to get reward output
-        rewards = super().forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            **kwargs
-        )
-        # Most TRL reward trainers expect a dict
-        # If rewards is a tuple, extract the scalar
-        if isinstance(rewards, tuple):
-            rewards = rewards[0]
-        return {"logits": rewards}
-
-class RewardModelTrainer(RewardTrainer):
-    def create_optimizer(self):
-        # Only pass value head parameters to optimizer
-        optimizer_grouped_parameters = [
-            {"params": [p for n, p in self.model.named_parameters() if "v_head" in n]}
-        ]
-        self.optimizer = torch.optim.AdamW(
-            optimizer_grouped_parameters,
-            lr=self.args.learning_rate,
-        )
-        return self.optimizer
 
 # Define accuracy metric
 def compute_reward_accuracy(eval_preds):
-    # eval_preds is a tuple: (scores, _)
-    # scores: shape (batch_size, 2) or two separate arrays
-    chosen_scores, rejected_scores = eval_preds
-    accuracy = (chosen_scores > rejected_scores).mean()
+    # eval_preds is a tuple: (predictions, labels)
+    # predictions has shape (num_examples, 2), cols = [chosen_score, rejected_score]
+    preds, _ = eval_preds
+    # Ensure it’s a NumPy array
+    preds = np.asarray(preds)
+    chosen_scores   = preds[:, 0]
+    rejected_scores = preds[:, 1]
+    accuracy = float((chosen_scores > rejected_scores).mean())
     return {"accuracy": accuracy}
 
 
@@ -57,13 +38,21 @@ def tokenize_pair(batch):
         "attention_mask_rejected": tok_r["attention_mask"],
     }
 
+def print_trainable_params(model):
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total = sum(p.numel() for p in model.parameters())
+    print(f"Trainable params: {trainable} / {total} ({100 * trainable / total:.2f}%)")
 
-model_path = "./qwen-sft-checkpoint/merged"
-tokenizer_path = "./qwen-sft-checkpoint/checkpoint-3000"
 
-# 1. Load tokenizer and model (with value head)
-tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
-reward_model = RewardModelWithDictOutput.from_pretrained(model_path)
+tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
+tokenizer.pad_token = tokenizer.eos_token
+reward_model = AutoModelForSequenceClassification.from_pretrained(
+    MODEL_PATH,
+    num_labels=1,
+    trust_remote_code=True,
+)
+reward_model.config.pad_token_id = tokenizer.pad_token_id
+
 
 # 3. Prepare train_dataset
 train_dataset = load_dataset("CarperAI/openai_summarize_comparisons", split="train")
@@ -73,16 +62,20 @@ train_dataset = train_dataset.map(tokenize_pair, batched=True)
 val_dataset   = val_dataset.map(tokenize_pair, batched=True)
 
 
-def print_trainable_params(model):
-    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    total = sum(p.numel() for p in model.parameters())
-    print(f"Trainable params: {trainable} / {total} ({100 * trainable / total:.2f}%)")
-    
+# 3) Freeze all but the score head
+for name, param in reward_model.named_parameters():
+    if name.startswith("score."):
+        param.requires_grad = True
+    else:
+        param.requires_grad = False
+
+
 print_trainable_params(reward_model)
 
 
 # Fix for TRL's RewardTrainer bug
 reward_model.warnings_issued = {}
+
 
 reward_config = RewardConfig(
     output_dir="./reward_model_output",
@@ -101,8 +94,7 @@ reward_config = RewardConfig(
     remove_unused_columns=False,
 )
 
-# 4. Train using RewardTrainer (from TRL)
-trainer = RewardModelTrainer(
+trainer = RewardTrainer(
     model=reward_model,
     args=reward_config,
     train_dataset=train_dataset,
@@ -115,12 +107,14 @@ trainer.train()
 
 
 # Save the reward model (including value head) as a HuggingFace model
-reward_model.base_model.save_pretrained(MODEL_SAVE_PATH)
-reward_model.value_head.cpu()  # Move to CPU to avoid DEVICE mismatch
+trainer.save_model(SAVE_PATH)
 
 # Save the value head weights separately if needed (HF doesn't handle custom heads natively)
-torch.save(reward_model.value_head.state_dict(), os.path.join(MODEL_SAVE_PATH, "value_head.pt"))
+torch.save(
+    reward_model.score.state_dict(),
+    os.path.join(SAVE_PATH, "score_head.pt")
+)
 
 # Save the tokenizer
-tokenizer.save_pretrained(MODEL_SAVE_PATH)
-print(f"Model and tokenizer saved to {MODEL_SAVE_PATH}/")
+tokenizer.save_pretrained(SAVE_PATH)
+print(f"Model and tokenizer saved to {SAVE_PATH}/")

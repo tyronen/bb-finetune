@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from datasets import load_dataset
 from torch.utils.data import Dataset, DataLoader
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModel
 from tqdm import tqdm
 import os
 
@@ -11,7 +11,7 @@ import os
 # ========== HYPERPARAMETERS ==========
 MODEL_PATH = "qwen-sft-checkpoint/merged"
 TOKENIZER_PATH = "qwen-sft-checkpoint/checkpoint-3000"
-BATCH_SIZE = 16
+BATCH_SIZE = 4
 MAX_LENGTH = 512
 LEARNING_RATE = 1e-5
 NUM_EPOCHS = 1
@@ -35,21 +35,19 @@ class ValueHead(nn.Module):
 
 
 class RewardModel(nn.Module):
-    def __init__(self, base_model):
-        super().__init__()
-        self.base_model = base_model
-        self.value_head = ValueHead(base_model.config.hidden_size)
-    
     def forward(self, input_ids, attention_mask=None):
         outputs = self.base_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            output_hidden_states=True,
             return_dict=True,
         )
-        hidden_states = outputs.hidden_states[-1]  # Last layer
-        reward = self.value_head(hidden_states)    # (batch, 1)
-        return reward.squeeze(-1)
+        # Only a single tensor of shape (batch, seq_len, hidden)
+        last_hidden = outputs.last_hidden_state  
+        # Pool to (batch, hidden)
+        pooled = last_hidden[:, -1, :]
+        # Predict reward
+        return self.value_head(pooled).squeeze(-1)
+
 
 class RewardComparisonDataset(Dataset):
     def __init__(self, hf_dataset, tokenizer, max_length=512):
@@ -115,7 +113,7 @@ def evaluate(model, dataloader, DEVICE):
 
 # ====== DATA LOADING ======
 tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH, trust_remote_code=True)
-model = AutoModelForCausalLM.from_pretrained(MODEL_PATH, trust_remote_code=True)
+model = AutoModel.from_pretrained(MODEL_PATH, trust_remote_code=True)
 
 
 train_dataset = load_dataset("CarperAI/openai_summarize_comparisons", split="train")
@@ -130,7 +128,13 @@ val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, n
 
 # ====== TRAINING SETUP ======
 reward_model = RewardModel(model).to(DEVICE)
-optimizer = torch.optim.AdamW(reward_model.parameters(), lr=LEARNING_RATE)
+
+for p in reward_model.model.parameters():
+    p.requires_grad = False
+
+optimizer = torch.optim.AdamW(
+    reward_model.value_head.parameters(), lr=LEARNING_RATE
+)
 
 
 # ====== TRAINING LOOP ======
