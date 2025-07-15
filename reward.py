@@ -1,4 +1,5 @@
 import os
+import time
 
 import torch
 import torch.nn as nn
@@ -184,19 +185,17 @@ def main():
 
     training_args = TrainingArguments(
         bf16=True,
-        dataloader_num_workers=4,
-        dataloader_persistent_workers=True,
         dataloader_pin_memory=True,
         eval_accumulation_steps=1,
         eval_steps=100,
         eval_strategy="steps",
-        gradient_accumulation_steps=8,
+        gradient_accumulation_steps=1,
         learning_rate=1e-5,
         logging_steps=10,
         max_steps=200,
         output_dir=utils.REWARD_DIR,
-        per_device_eval_batch_size=2,
-        per_device_train_batch_size=2,
+        per_device_eval_batch_size=1,
+        per_device_train_batch_size=1,
         remove_unused_columns=False,
         report_to="wandb",
         save_steps=0,
@@ -240,7 +239,10 @@ def main():
         eval_dataset=val_dataset,
         data_collator=data_collator,
     )
+    start = time.time()
     trainer.train()
+    end = time.time()
+    print(f"WALL CLOCK training time: {end - start:.2f} seconds")
     # Merge LoRA into base
     merged_model = model.model.merge_and_unload()
 
