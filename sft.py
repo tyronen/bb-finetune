@@ -10,7 +10,6 @@ from transformers import (
 from trl import SFTConfig, SFTTrainer
 
 import utils
-from utils import BASE, SFT_DIR, max_input_length
 
 
 class CustomTrainer(SFTTrainer):
@@ -25,11 +24,11 @@ def main():
     device = utils.get_device()
     wandb.init(entity="mlx-institute", project="sft")
 
-    tokenizer = AutoTokenizer.from_pretrained(BASE)
+    tokenizer = AutoTokenizer.from_pretrained(utils.BASE)
     tokenizer.pad_token = tokenizer.eos_token
 
     model = AutoModelForCausalLM.from_pretrained(
-        BASE,
+        utils.BASE,
         attn_implementation="flash_attention_2",  # ❶ fast kernels
         use_cache=False,
         torch_dtype=torch.bfloat16,
@@ -66,9 +65,9 @@ def main():
         lr_scheduler_kwargs={"min_lr": 1e-6},
         lr_scheduler_type="cosine_with_min_lr",
         max_steps=3000,
-        max_length=max_input_length,
+        max_length=utils.max_input_length,
         optim="adamw_torch_fused",  # fused optimiser
-        output_dir=SFT_DIR,
+        output_dir=utils.SFT_DIR,
         per_device_eval_batch_size=16,
         per_device_train_batch_size=4,
         report_to="wandb",
@@ -122,7 +121,9 @@ def main():
         ],
     )
     trainer.train()
-    trainer.save_model(SFT_DIR)
+    model = model.merge_and_unload()
+    model.save_pretrained(utils.SFT_DIR)
+    tokenizer.save_pretrained(utils.SFT_DIR)
     wandb.finish(0)
 
 
