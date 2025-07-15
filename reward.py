@@ -1,4 +1,5 @@
 import os
+import shutil
 import time
 
 import torch
@@ -31,6 +32,15 @@ def create_comparison_dataset(path, split):
 
 
 class PairwiseDataset(Dataset):
+    @classmethod
+    def from_tensors(cls, tensors):
+        obj = cls.__new__(cls)
+        obj.chosen_input_ids = tensors["chosen_input_ids"]
+        obj.chosen_attn_masks = tensors["chosen_attn_masks"]
+        obj.rejected_input_ids = tensors["rejected_input_ids"]
+        obj.rejected_attn_masks = tensors["rejected_attn_masks"]
+        return obj
+
     def __init__(self, pairs, tokenizer, max_length):
         super().__init__()
         self.chosen_input_ids = []
@@ -65,6 +75,10 @@ class PairwiseDataset(Dataset):
                 self.rejected_attn_masks.append(
                     rejected_encodings_dict["attention_mask"]
                 )
+        self.chosen_input_ids = torch.cat(self.chosen_input_ids, dim=0)  # [N, seq_len]
+        self.chosen_attn_masks = torch.cat(self.chosen_attn_masks, dim=0)
+        self.rejected_input_ids = torch.cat(self.rejected_input_ids, dim=0)
+        self.rejected_attn_masks = torch.cat(self.rejected_attn_masks, dim=0)
 
     def __len__(self):
         return len(self.chosen_input_ids)
@@ -142,8 +156,10 @@ class QwenRewardModel(nn.Module):
 class DataCollatorReward:
     def __call__(self, data):
         batch = {}
-        batch["input_ids"] = torch.cat([f[0] for f in data] + [f[2] for f in data])
-        batch["attention_mask"] = torch.cat([f[1] for f in data] + [f[3] for f in data])
+        batch["input_ids"] = torch.stack([f[0] for f in data] + [f[2] for f in data])
+        batch["attention_mask"] = torch.stack(
+            [f[1] for f in data] + [f[3] for f in data]
+        )
         batch["labels"] = torch.tensor([0] * len(data) + [1] * len(data))
         return batch
 
@@ -160,17 +176,35 @@ def compute_metrics(eval_preds):
 
 
 def cache_pairwise_dataset(tokenizer, cache_path, split):
-    if os.path.exists(cache_path):
-        print(f"Loading cached PairwiseDataset from {cache_path}. Ignore warning")
-        return torch.load(cache_path)
-    else:
-        print("Building PairwiseDataset and caching...")
-        pairs = create_comparison_dataset(
-            "CarperAI/openai_summarize_comparisons", split
-        )
-        dataset = PairwiseDataset(pairs, tokenizer, max_length=utils.max_input_length)
-        torch.save(dataset, cache_path)
-        return dataset
+    tmp_path = f"{utils.TMP_DIR}/{cache_path}"
+    data_path = f"{utils.DATA_DIR}/{cache_path}"
+
+    # 1. If the file exists in /tmp, load from there
+    if os.path.exists(tmp_path):
+        print(f"Loading cached PairwiseDataset from {tmp_path}")
+        tensors = torch.load(tmp_path)
+        return PairwiseDataset.from_tensors(tensors)
+
+    # 2. If it exists in data/, copy to /tmp, then load
+    if os.path.exists(data_path):
+        print(f"Copying {data_path} to {tmp_path}")
+        shutil.copyfile(data_path, tmp_path)
+        tensors = torch.load(tmp_path)
+        return PairwiseDataset.from_tensors(tensors)
+
+    # 3. Else, build and save to both data/ and /tmp
+    print("Building PairwiseDataset and caching...")
+    pairs = create_comparison_dataset("CarperAI/openai_summarize_comparisons", split)
+    dataset = PairwiseDataset(pairs, tokenizer, max_length=utils.max_input_length)
+    tensor_dict = {
+        "chosen_input_ids": dataset.chosen_input_ids,
+        "chosen_attn_masks": dataset.chosen_attn_masks,
+        "rejected_input_ids": dataset.rejected_input_ids,
+        "rejected_attn_masks": dataset.rejected_attn_masks,
+    }
+    torch.save(tensor_dict, data_path)
+    torch.save(tensor_dict, tmp_path)
+    return dataset
 
 
 def main():
