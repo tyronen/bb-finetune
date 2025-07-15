@@ -10,4 +10,5 @@ peft>=0.16.0
 rouge_score>=0.1.2
 tqdm>=4.67.1
 transformers>=4.53.0
+trl>=0.19.1
 wandb>=0.20.1
