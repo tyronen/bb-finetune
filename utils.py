@@ -4,6 +4,10 @@ from contextlib import nullcontext
 import torch
 from torch.amp import autocast, GradScaler
 
+BASE = "Qwen/Qwen3-0.6B"
+SFT_DIR = "data/sft"
+REWARD_DIR = "data/reward"
+
 
 def setup_logging():
     logging.basicConfig(
@@ -26,3 +30,6 @@ def amp_components(device, train=False):
     else:
         # fall-back: no automatic casting, dummy scaler
         return nullcontext(), GradScaler(enabled=False)
+
+
+max_input_length = 550

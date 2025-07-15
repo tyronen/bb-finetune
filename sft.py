@@ -10,10 +10,7 @@ from transformers import (
 from trl import SFTConfig, SFTTrainer
 
 import utils
-
-BASE = "Qwen/Qwen3-0.6B"
-OUTPUT_DIR = "data"
-max_input_length = 550
+from utils import BASE, SFT_DIR, max_input_length
 
 
 class CustomTrainer(SFTTrainer):
@@ -58,20 +55,21 @@ def main():
         dataloader_num_workers=8,
         dataloader_persistent_workers=True,
         dataloader_pin_memory=True,
-        eval_accumulation_steps=4,
+        eval_accumulation_steps=1,
         eval_strategy="steps",
-        eval_steps=100,
+        eval_steps=500,
         gradient_accumulation_steps=2,
         learning_rate=2e-4,
         load_best_model_at_end=True,
         log_level="info",
         logging_steps=50,
-        lr_scheduler_type="constant_with_warmup",
-        max_steps=500,
+        lr_scheduler_kwargs={"min_lr": 1e-6},
+        lr_scheduler_type="cosine_with_min_lr",
+        max_steps=3000,
         max_length=max_input_length,
         optim="adamw_torch_fused",  # fused optimiser
-        output_dir=OUTPUT_DIR,
-        per_device_eval_batch_size=8,
+        output_dir=SFT_DIR,
+        per_device_eval_batch_size=16,
         per_device_train_batch_size=4,
         report_to="wandb",
         save_steps=1000,
@@ -83,6 +81,7 @@ def main():
 
     train_dataset = load_dataset("CarperAI/openai_summarize_tldr", split="train")
     dev_dataset = load_dataset("CarperAI/openai_summarize_tldr", split="valid")
+    dev_dataset = dev_dataset.select(range(min(2000, len(dev_dataset))))
 
     # --- build the chat prompt once -----------------------------------
     def build_chat(sample):
@@ -123,7 +122,7 @@ def main():
         ],
     )
     trainer.train()
-    trainer.save_model(OUTPUT_DIR)
+    trainer.save_model(SFT_DIR)
     wandb.finish(0)
 
 
