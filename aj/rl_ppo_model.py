@@ -17,40 +17,80 @@ hf_logging.set_verbosity_error()
 # import sys; sys.exit()
 
 
+# class GenerationCallback(TrainerCallback):
+#     def __init__(self, prompt: str, interval: int, tokenizer=None, max_new_tokens=64):
+#         """
+#         prompt:      the single prompt you want to sample from
+#         interval:    only run every `interval` logging steps
+#         tokenizer:   your tokenizer
+#         max_new_tokens: how many tokens to generate
+#         """
+#         self.prompt = prompt
+#         self.interval = interval
+#         self.tokenizer = tokenizer
+#         self.max_new_tokens = max_new_tokens
+
+#     def on_log(self, args, state, control, logs=None, **kwargs):
+#         # `on_log` only fires when the Trainer logs (i.e. every logging_steps)
+#         if state.global_step % self.interval == 0:
+#             model = kwargs["model"]
+#             model.eval()
+#             with torch.no_grad():
+#                 inputs = self.tokenizer(
+#                     self.prompt,
+#                     return_tensors="pt",
+#                     truncation=True,
+#                     max_length=512
+#                 ).to(model.device)
+#                 out = model.generate(
+#                     **inputs,
+#                     max_new_tokens=self.max_new_tokens,
+#                     pad_token_id=self.tokenizer.eos_token_id
+#                 )
+#             gen = self.tokenizer.decode(out[0], skip_special_tokens=True)
+#             # strip off the prompt if it echoes it back
+#             summary = gen[len(self.prompt):].strip()
+#             print(f"\n>>> [Step {state.global_step}] Sample generation:\n{summary}\n")
+
 class GenerationCallback(TrainerCallback):
     def __init__(self, prompt: str, interval: int, tokenizer=None, max_new_tokens=64):
-        """
-        prompt:      the single prompt you want to sample from
-        interval:    only run every `interval` logging steps
-        tokenizer:   your tokenizer
-        max_new_tokens: how many tokens to generate
-        """
         self.prompt = prompt
         self.interval = interval
         self.tokenizer = tokenizer
         self.max_new_tokens = max_new_tokens
 
     def on_log(self, args, state, control, logs=None, **kwargs):
-        # `on_log` only fires when the Trainer logs (i.e. every logging_steps)
-        if state.global_step % self.interval == 0:
-            model = kwargs["model"]
-            model.eval()
-            with torch.no_grad():
-                inputs = self.tokenizer(
-                    self.prompt,
-                    return_tensors="pt",
-                    truncation=True,
-                    max_length=512
-                ).to(model.device)
-                out = model.generate(
-                    **inputs,
-                    max_new_tokens=self.max_new_tokens,
-                    pad_token_id=self.tokenizer.eos_token_id
-                )
-            gen = self.tokenizer.decode(out[0], skip_special_tokens=True)
-            # strip off the prompt if it echoes it back
-            summary = gen[len(self.prompt):].strip()
-            print(f"\n>>> [Step {state.global_step}] Sample generation:\n{summary}\n")
+        if state.global_step % self.interval != 0:
+            return
+
+        # Grab the wrapped model
+        wrapper = kwargs["model"]
+
+        # get the right device from its parameters
+        device = next(wrapper.parameters()).device
+
+        wrapper.eval()
+        with torch.no_grad():
+            # tokenize & move inputs
+            inputs = self.tokenizer(
+                self.prompt,
+                return_tensors="pt",
+                truncation=True,
+                max_length=512,
+            )
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+
+            # generate
+            out = wrapper.generate(
+                **inputs,
+                max_new_tokens=self.max_new_tokens,
+                pad_token_id=self.tokenizer.eos_token_id,
+            )
+
+        # decode & print
+        gen = self.tokenizer.decode(out[0], skip_special_tokens=True)
+        summary = gen[len(self.prompt) :].strip()
+        print(f"\n>>> [Step {state.global_step}] Sample generation:\n{summary}\n")
 
 
 def force_return_dict_forward(self, *args, **kwargs):
@@ -86,22 +126,22 @@ def get_reward(prompt, summary):
     return reward
 
 
-def evaluate_policy(model, tokenizer, reward_model, eval_prompts, max_new_tokens=64, device="cuda"):
-    model.eval()
-    reward_model.eval()
-    rewards = []
-    for prompt in tqdm(eval_prompts, desc="Evaluating policy"):
-        input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
-        with torch.no_grad():
-            output_ids = model.generate(input_ids, max_new_tokens=max_new_tokens)
-        generated = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-        # Optionally, strip prompt from generated if model echoes prompt
-        gen_summary = generated[len(prompt):].strip()
-        reward = get_reward(prompt, gen_summary)
-        rewards.append(reward)
-    avg_reward = sum(rewards) / len(rewards)
-    print(f"Average eval reward: {avg_reward:.3f}")
-    return avg_reward
+# def evaluate_policy(model, tokenizer, reward_model, eval_prompts, max_new_tokens=64, device="cuda"):
+#     model.eval()
+#     reward_model.eval()
+#     rewards = []
+#     for prompt in tqdm(eval_prompts, desc="Evaluating policy"):
+#         input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
+#         with torch.no_grad():
+#             output_ids = model.generate(input_ids, max_new_tokens=max_new_tokens)
+#         generated = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+#         # Optionally, strip prompt from generated if model echoes prompt
+#         gen_summary = generated[len(prompt):].strip()
+#         reward = get_reward(prompt, gen_summary)
+#         rewards.append(reward)
+#     avg_reward = sum(rewards) / len(rewards)
+#     print(f"Average eval reward: {avg_reward:.3f}")
+#     return avg_reward
 
 
 def _score(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -261,7 +301,7 @@ ppo_config = PPOConfig(
     save_steps=500,
     save_total_limit=3,
     logging_strategy="steps",     # log according to step counts
-    logging_steps=50,
+    logging_steps=500,
     disable_tqdm=False,
     
 )
