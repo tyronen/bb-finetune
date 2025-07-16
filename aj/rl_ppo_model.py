@@ -223,12 +223,7 @@ eval_dataset_ppo = [
     for i, input_ids in enumerate(tokenized_eval_prompts["input_ids"])
 ]
 
-sample_prompts = [train_prompts[0], train_prompts[1], train_prompts[2]] 
-
-callbacks = [
-    GenerationCallback(prompt, interval=50, tokenizer=tokenizer)
-    for prompt in sample_prompts
-]
+sample_prompt = train_prompts[0]
 
 # ==== PPO Config ====
 ppo_config = PPOConfig(
@@ -275,7 +270,7 @@ ppo_trainer = PPOTrainer(
     data_collator,            # data_collator (optional)
     eval_dataset_ppo,            # eval_dataset (optional)
     None,
-    callbacks=callbacks,
+    callbacks=[ GenerationCallback(sample_prompt, interval=50, tokenizer=tokenizer) ],
 )
 
 # generation_kwargs = {
