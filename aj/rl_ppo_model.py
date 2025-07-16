@@ -27,26 +27,26 @@ def force_return_dict_forward(self, *args, **kwargs):
     return output
 
 
-# ==== Reward function ====
-def get_reward(prompt, summary):
-    """
-    Use reward_model to score a prompt+summary pair.
-    Returns a scalar reward.
-    """
-    # Format input for reward model (copy your test script logic here if needed)
-    input_text = prompt.strip() + "\n" + summary.strip()
-    inputs = tokenizer(
-        input_text,
-        padding=True,
-        truncation=True,
-        max_length=512,
-        return_tensors="pt"
-    )
-    inputs = {k: v.to(reward_model.device) for k, v in inputs.items()}
+# # ==== Reward function ====
+# def get_reward(prompt, summary):
+#     """
+#     Use reward_model to score a prompt+summary pair.
+#     Returns a scalar reward.
+#     """
+#     # Format input for reward model (copy your test script logic here if needed)
+#     input_text = prompt.strip() + "\n" + summary.strip()
+#     inputs = tokenizer(
+#         input_text,
+#         padding=True,
+#         truncation=True,
+#         max_length=512,
+#         return_tensors="pt"
+#     )
+#     inputs = {k: v.to(reward_model.device) for k, v in inputs.items()}
 
-    with torch.no_grad():
-        reward = reward_model(**inputs).logits.squeeze().item()
-    return reward
+#     with torch.no_grad():
+#         reward = reward_model(**inputs).logits.squeeze().item()
+#     return reward
 
 
 # def evaluate_policy(model, tokenizer, reward_model, eval_prompts, max_new_tokens=64, device="cuda"):
