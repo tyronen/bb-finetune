@@ -193,8 +193,8 @@ ppo_config = PPOConfig(
     fp16=True,
     bf16=False,
     # RLHF/PPO settings:
-    batch_size=16,              # PPO batch size (outer loop)
-    mini_batch_size=4,          # PPO mini batch (for advantage estimation)
+    batch_size=8,              # PPO batch size (outer loop)
+    mini_batch_size=2,          # PPO mini batch (for advantage estimation)
     num_ppo_epochs=4,
     whiten_rewards=False,       # Most RLHF doesn't whiten
     kl_coef=0.05,               # Initial KL penalty coefficient
