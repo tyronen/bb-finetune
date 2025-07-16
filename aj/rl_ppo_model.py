@@ -262,6 +262,8 @@ ppo_config = PPOConfig(
     save_total_limit=3,
     logging_strategy="steps",     # log according to step counts
     logging_steps=50,
+    disable_tqdm=False,
+    
 )
 
 ppo_trainer = PPOTrainer(
