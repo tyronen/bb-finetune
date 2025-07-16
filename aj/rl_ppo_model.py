@@ -7,7 +7,9 @@ from tqdm import tqdm
 import os
 import inspect
 from transformers import logging as hf_logging
+from transformers.trainer_callback import PrinterCallback
 hf_logging.set_verbosity_error()
+
 
 
 # print(inspect.getfile(PPOTrainer))
@@ -54,44 +56,46 @@ hf_logging.set_verbosity_error()
 
 class GenerationCallback(TrainerCallback):
     def __init__(self, prompt: str, interval: int, tokenizer=None, max_new_tokens=64):
-        self.prompt = prompt
-        self.interval = interval
-        self.tokenizer = tokenizer
+        self.prompt         = prompt
+        self.interval       = interval
+        self.tokenizer      = tokenizer
         self.max_new_tokens = max_new_tokens
 
     def on_log(self, args, state, control, logs=None, **kwargs):
-        # only run every `interval` logging steps
+        # only run on multiples of `interval`
         if state.global_step % self.interval != 0:
             return
 
         wrapper = kwargs["model"]
 
-        # 1) if it's wrapped in DistributedDataParallel / Accelerate, peel off .module
-        model = wrapper.module if hasattr(wrapper, "module") else wrapper
-        # 2) if TRL has wrapped it further in PolicyAndValueWrapper, that wrapper
-        #    usually stores the HF LM under `.model` or `.pretrained_model`
-        if hasattr(model, "model"):
-            model = model.model
-        elif hasattr(model, "pretrained_model"):
-            model = model.pretrained_model
+        # 1) strip off any DDP / Accelerate wrapper
+        if hasattr(wrapper, "module"):
+            wrapper = wrapper.module
 
-        model.eval()
+        # 2) strip off TRL's PolicyAndValueWrapper: get the pure policy LM
+        #    TRL names it .policy_model, so:
+        lm = getattr(wrapper, "policy_model", None) or wrapper
 
-        # get device from real model
-        device = next(model.parameters()).device
+        # 3) if that LM itself is wrapped again, strip its .module
+        if hasattr(lm, "module"):
+            lm = lm.module
 
-        # tokenize & move to the right device
+        # now `lm` should be your AutoModelForCausalLMWithValueHead
+        lm.eval()
+
+        # move inputs to the same device
+        device = next(lm.parameters()).device
         inputs = self.tokenizer(
             self.prompt,
             return_tensors="pt",
             truncation=True,
             max_length=512,
         )
-        inputs = {k: v.to(device) for k,v in inputs.items()}
+        inputs = {k: v.to(device) for k, v in inputs.items()}
 
-        # generate
+        # actually generate
         with torch.no_grad():
-            out = model.generate(
+            out = lm.generate(
                 **inputs,
                 max_new_tokens=self.max_new_tokens,
                 pad_token_id=self.tokenizer.eos_token_id,
@@ -340,6 +344,8 @@ ppo_trainer = PPOTrainer(
 #     "pad_token_id": tokenizer.eos_token_id,
 #     "max_new_tokens": 20,
 # }
+
+ppo_trainer.callback_handler.remove_callback(PrinterCallback)
 
 ppo_trainer.train()
 
