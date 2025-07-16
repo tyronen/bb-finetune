@@ -64,10 +64,10 @@ class PairwiseDataset(Dataset):
                 return_tensors="pt",
             )
             if not torch.all(
-                    torch.eq(
-                        chosen_encodings_dict["input_ids"],
-                        rejected_encodings_dict["input_ids"],
-                    )
+                torch.eq(
+                    chosen_encodings_dict["input_ids"],
+                    rejected_encodings_dict["input_ids"],
+                )
             ).item():
                 self.chosen_input_ids.append(chosen_encodings_dict["input_ids"])
                 self.chosen_attn_masks.append(chosen_encodings_dict["attention_mask"])
@@ -103,15 +103,15 @@ class QwenRewardModel(nn.Module):
         self.PAD_ID = self.tokenizer(self.tokenizer.pad_token)["input_ids"][0]
 
     def forward(
-            self,
-            input_ids=None,
-            past_key_values=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
+        self,
+        input_ids=None,
+        past_key_values=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
     ):
         model_outputs = self.model(
             input_ids,
@@ -221,12 +221,12 @@ def main():
         bf16=True,
         dataloader_pin_memory=True,
         eval_accumulation_steps=1,
-        eval_steps=100,
+        eval_steps=10000,
         eval_strategy="steps",
         gradient_accumulation_steps=1,
         learning_rate=1e-5,
-        logging_steps=10,
-        max_steps=200,
+        logging_steps=1000,
+        num_train_epochs=1,
         output_dir=utils.REWARD_DIR,
         per_device_eval_batch_size=1,
         per_device_train_batch_size=1,
@@ -238,7 +238,6 @@ def main():
     )
 
     # Initialize the reward model from the (supervised) fine-tuned Qwen
-
     model = AutoModelForCausalLM.from_pretrained(
         utils.SFT_DIR, torch_dtype=torch.bfloat16
     )
@@ -261,7 +260,7 @@ def main():
         tokenizer, "train_pairwise_dataset.pt", "train"
     )
     val_dataset = cache_pairwise_dataset(tokenizer, "val_pairwise_dataset.pt", "test")
-    val_dataset = Subset(val_dataset, range(20))
+    val_dataset = Subset(val_dataset, range(2000))
     # Create the collator to gather batches of pairwise comparisons
     data_collator = DataCollatorReward()
 
