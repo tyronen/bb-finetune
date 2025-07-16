@@ -60,28 +60,38 @@ class GenerationCallback(TrainerCallback):
         self.max_new_tokens = max_new_tokens
 
     def on_log(self, args, state, control, logs=None, **kwargs):
+        # only run every `interval` logging steps
         if state.global_step % self.interval != 0:
             return
 
-        # Grab the wrapped model
         wrapper = kwargs["model"]
 
-        # get the right device from its parameters
-        device = next(wrapper.parameters()).device
+        # 1) if it's wrapped in DistributedDataParallel / Accelerate, peel off .module
+        model = wrapper.module if hasattr(wrapper, "module") else wrapper
+        # 2) if TRL has wrapped it further in PolicyAndValueWrapper, that wrapper
+        #    usually stores the HF LM under `.model` or `.pretrained_model`
+        if hasattr(model, "model"):
+            model = model.model
+        elif hasattr(model, "pretrained_model"):
+            model = model.pretrained_model
 
-        wrapper.eval()
+        model.eval()
+
+        # get device from real model
+        device = next(model.parameters()).device
+
+        # tokenize & move to the right device
+        inputs = self.tokenizer(
+            self.prompt,
+            return_tensors="pt",
+            truncation=True,
+            max_length=512,
+        )
+        inputs = {k: v.to(device) for k,v in inputs.items()}
+
+        # generate
         with torch.no_grad():
-            # tokenize & move inputs
-            inputs = self.tokenizer(
-                self.prompt,
-                return_tensors="pt",
-                truncation=True,
-                max_length=512,
-            )
-            inputs = {k: v.to(device) for k, v in inputs.items()}
-
-            # generate
-            out = wrapper.generate(
+            out = model.generate(
                 **inputs,
                 max_new_tokens=self.max_new_tokens,
                 pad_token_id=self.tokenizer.eos_token_id,
@@ -89,8 +99,9 @@ class GenerationCallback(TrainerCallback):
 
         # decode & print
         gen = self.tokenizer.decode(out[0], skip_special_tokens=True)
-        summary = gen[len(self.prompt) :].strip()
+        summary = gen[len(self.prompt):].strip()
         print(f"\n>>> [Step {state.global_step}] Sample generation:\n{summary}\n")
+
 
 
 def force_return_dict_forward(self, *args, **kwargs):
@@ -266,7 +277,7 @@ eval_dataset_ppo = [
 sample_prompts = [train_prompts[0], train_prompts[1], train_prompts[2]]
 
 callbacks = [
-    GenerationCallback(prompt, interval=50, tokenizer=tokenizer)
+    GenerationCallback(prompt, interval=10, tokenizer=tokenizer)
     for prompt in sample_prompts
 ]
 
