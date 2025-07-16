@@ -170,7 +170,7 @@ eval_dataset = load_dataset("CarperAI/openai_summarize_tldr", split="valid")
 eval_prompts = [item["prompt"] for item in eval_dataset][:N_EVAL]  # e.g., first 100 for quick eval
 eval_summaries = [item["label"] for item in eval_dataset][:N_EVAL] 
 
-tokenized_eval = tokenizer(
+tokenized_eval_prompts = tokenizer(
     eval_prompts,
     padding=True,
     truncation=True,
@@ -179,8 +179,8 @@ tokenized_eval = tokenizer(
 )
 
 eval_dataset_ppo = [
-    {"input_ids": input_ids, "index": i, "label": eval_summaries[i]}
-    for i, input_ids in enumerate(tokenized_eval["input_ids"])
+    {"input_ids": input_ids, "index": i}
+    for i, input_ids in enumerate(tokenized_eval_prompts["input_ids"])
 ]
 
 # ==== PPO Config ====
