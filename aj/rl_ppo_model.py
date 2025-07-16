@@ -93,7 +93,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 SFT_MODEL_PATH = "qwen-sft-checkpoint/merged"
 TOKENIZER_PATH = "qwen-sft-checkpoint/checkpoint-3000"
 REWARD_MODEL_PATH = "qwen-reward-checkpoint"
-SAVE_PATH = "qwen-ppo-policy"
+SAVE_PATH = "qwen-ppo-policy-checkpoint"
 os.makedirs(SAVE_PATH, exist_ok=True)
 
 # ==== Tokenizer ====
