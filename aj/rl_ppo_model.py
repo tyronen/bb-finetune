@@ -208,6 +208,7 @@ ppo_config = PPOConfig(
     eval_strategy="steps",
     eval_steps=500,           # e.g. every 500 training steps
     eval_on_start=False,
+    max_steps=3000,
 )
 
 ppo_trainer = PPOTrainer(
