@@ -9,9 +9,19 @@ from datasets import load_dataset
 from peft import get_peft_model, LoraConfig
 from torch.utils.data import Dataset, Subset
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, Trainer
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    TrainingArguments,
+    Trainer,
+    AutoModelForSequenceClassification,
+    PreTrainedModel,
+)
+from transformers.modeling_outputs import SequenceClassifierOutput
 
 import utils
+
+scaling_factor = 100
 
 
 def create_comparison_dataset(path, split):
@@ -92,65 +102,42 @@ class PairwiseDataset(Dataset):
         )
 
 
-class QwenRewardModel(nn.Module):
+class QwenRewardModel(PreTrainedModel):
     def __init__(self, sft):
-        super().__init__()
-        self.config = sft.config
-        self.model = sft
-        self.v_head = nn.Linear(self.config.hidden_size, 1, bias=False)
-        self.tokenizer = AutoTokenizer.from_pretrained(utils.SFT_DIR)
-        self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.PAD_ID = self.tokenizer(self.tokenizer.pad_token)["input_ids"][0]
+        super().__init__(sft.config)
+        self.transformer = sft
+        self.score = nn.Linear(self.config.hidden_size, 1, bias=False)
+        self.config.problem_type = "regression"
+        self.config.num_labels = 1
 
     def forward(
             self,
             input_ids=None,
-            past_key_values=None,
             attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
             labels=None,
+            **kwargs,
     ):
-        model_outputs = self.model(
+        model_outputs = self.transformer(
             input_ids,
-            past_key_values=past_key_values,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
             output_hidden_states=True,
         )
 
         hidden_states = model_outputs.hidden_states[-1]
 
-        rewards = self.v_head(hidden_states).squeeze(-1)
+        rewards = self.score(hidden_states).squeeze(-1)
 
         # Split the inputs and rewards into two parts, chosen and rejected
-        assert len(input_ids.shape) == 2
-        bs = input_ids.shape[0] // 2
+        end_mask = attention_mask.sum(dim=1) - 1
+        logits = rewards[torch.arange(rewards.size(0)), end_mask].unsqueeze(-1)
+        loss = None
+        if labels is not None:
+            chosen_end_scores, rejected_end_scores = logits.chunk(2, dim=0)
+            loss = -torch.nn.functional.logsigmoid(
+                chosen_end_scores - rejected_end_scores
+            ).mean()
 
-        chosen_mask = attention_mask[:bs]
-        rejected_mask = attention_mask[bs:]
-
-        chosen_lengths = chosen_mask.sum(dim=1) - 1
-        rejected_lengths = rejected_mask.sum(dim=1) - 1
-
-        # Get end rewards efficiently (no loops!)
-        batch_indices = torch.arange(bs, device=input_ids.device)
-        chosen_end_scores = rewards[batch_indices, chosen_lengths]
-        rejected_end_scores = rewards[batch_indices + bs, rejected_lengths]
-
-        loss = -torch.nn.functional.logsigmoid(
-            chosen_end_scores - rejected_end_scores
-        ).mean()
-        return {
-            "loss": loss,
-            "chosen_end_scores": chosen_end_scores,
-            "rejected_end_scores": rejected_end_scores,
-        }
+        return SequenceClassifierOutput(loss=loss, logits=logits)
 
 
 class DataCollatorReward:
@@ -165,14 +152,12 @@ class DataCollatorReward:
 
 
 def compute_metrics(eval_preds):
-    chosen_end_scores = eval_preds.predictions[0]  # chosen scores
-    rejected_end_scores = eval_preds.predictions[1]  # rejected scores
-
-    result = {}
-    acc = sum(chosen_end_scores > rejected_end_scores) / len(rejected_end_scores)
-    result["accuracy"] = acc
-
-    return result
+    preds = eval_preds.predictions.squeeze()  # (N,)
+    half = preds.shape[0] // 2
+    chosen_end_scores = preds[:half]
+    rejected_end_scores = preds[half:]
+    acc = (chosen_end_scores > rejected_end_scores).mean().item()
+    return {"accuracy": acc}
 
 
 def cache_pairwise_dataset(tokenizer, cache_path, split):
@@ -219,18 +204,28 @@ def main():
 
     per_device_batch_size = 4
     gradient_accumulation_steps = 4
+    all_possible_steps = 92534
+    steps_per_epoch = (
+            all_possible_steps
+            // scaling_factor
+            // per_device_batch_size
+            // gradient_accumulation_steps
+    )
+    eval_steps = steps_per_epoch // 8
+    logging_steps = eval_steps // 2
     training_args = TrainingArguments(
         bf16=True,
         dataloader_pin_memory=True,
-        eval_steps=10000,
         eval_accumulation_steps=gradient_accumulation_steps,
+        eval_steps=eval_steps,
         eval_strategy="steps",
         gradient_accumulation_steps=gradient_accumulation_steps,
         learning_rate=2e-4,
         lr_scheduler_kwargs={"min_lr": 1e-6},
         lr_scheduler_type="cosine_with_min_lr",
-        logging_steps=1000,
+        logging_steps=logging_steps,
         max_grad_norm=1.0,
+        max_steps=steps_per_epoch,
         num_train_epochs=1,
         output_dir=utils.REWARD_DIR,
         per_device_eval_batch_size=per_device_batch_size,
@@ -248,8 +243,8 @@ def main():
         utils.SFT_DIR, torch_dtype=torch.bfloat16
     )
     lora_cfg = LoraConfig(
-        r=32,  # rank of LoRA matrices
-        lora_alpha=64,
+        r=16,  # rank of LoRA matrices
+        lora_alpha=32,
         lora_dropout=0.05,
         bias="none",
         task_type="CAUSAL_LM",
@@ -257,9 +252,8 @@ def main():
     )
 
     model = get_peft_model(model, lora_cfg)
-    model.gradient_checkpointing_enable()
     model = QwenRewardModel(model)
-    torch.nn.init.normal_(model.v_head.weight, std=0.01)
+    torch.nn.init.normal_(model.score.weight, std=0.01)
     model.to(device)
 
     # Make pairwise datasets for training
@@ -267,7 +261,7 @@ def main():
         tokenizer, "train_pairwise_dataset.pt", "train"
     )
     val_dataset = cache_pairwise_dataset(tokenizer, "val_pairwise_dataset.pt", "test")
-    val_dataset = Subset(val_dataset, range(2000))
+    val_dataset = Subset(val_dataset, range(2000 // scaling_factor))
     # Create the collator to gather batches of pairwise comparisons
     data_collator = DataCollatorReward()
 
@@ -283,14 +277,19 @@ def main():
     trainer.train()
     end = time.time()
     print(f"WALL CLOCK training time: {end - start:.2f} seconds")
-    # Merge LoRA into base
-    merged_model = model.model.merge_and_unload()
-
-    # (Optional) Save the reward head weights if needed
-    torch.save(model.v_head.state_dict(), os.path.join(utils.REWARD_DIR, "v_head.pt"))
-
-    # Save the merged base model and tokenizer
-    merged_model.save_pretrained(utils.REWARD_DIR)
+    merged = model.transformer.merge_and_unload()  # fuse LoRA into base
+    config = merged.config
+    config.problem_type = "regression"
+    config.num_labels = 1
+    merged.save_pretrained(f"{utils.REWARD_DIR}/merged")
+    sc_model = AutoModelForSequenceClassification.from_pretrained(
+        f"{utils.REWARD_DIR}/merged",
+        trust_remote_code=True,
+        config=config,
+        ignore_mismatched_sizes=True,
+    )
+    sc_model.score.weight.data = model.score.weight.data.clone()
+    sc_model.save_pretrained(utils.REWARD_DIR)
     tokenizer.save_pretrained(utils.REWARD_DIR)
     wandb.finish(0)
 

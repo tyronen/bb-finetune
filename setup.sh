@@ -10,9 +10,11 @@ mkdir -p data
 source $HOME/.local/bin/env
 if [[ -n "$SSH_CONNECTION" && -d /workspace ]]; then
   echo "🐧 Running on remote runpod with storage attached - setting custom hf cache dir"
-  mkdir -p /workspace/.cache/datasets_cache
   set -a
-  export HF_DATASETS_CACHE="/workspace/.cache/datasets_cache"
+  export HF_HOME="/workspace/.cache"
+  export HF_DATASETS_CACHE="/dev/shm/.cache/datasets_cache"
+  mkdir -p $HF_HOME
+  mkdir -p $HF_DATASETS_CACHE
   set +a
 fi
 
