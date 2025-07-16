@@ -186,29 +186,33 @@ eval_dataset_ppo = [
 # ==== PPO Config ====
 ppo_config = PPOConfig(
     output_dir=SAVE_PATH,                # Where to save checkpoints
-    per_device_train_batch_size=8,          # Used for DataLoader, not PPO batch size
-    per_device_eval_batch_size=8,           # Same as above
+    per_device_train_batch_size=2,          # Used for DataLoader, not PPO batch size
+    per_device_eval_batch_size=2,           # Same as above
     gradient_accumulation_steps=1,
     learning_rate=1.41e-5,
     fp16=True,
     bf16=False,
     # RLHF/PPO settings:
-    batch_size=8,              # PPO batch size (outer loop)
-    mini_batch_size=2,          # PPO mini batch (for advantage estimation)
-    num_ppo_epochs=4,
+    batch_size=2,              # PPO batch size (outer loop)
+    mini_batch_size=1,          # PPO mini batch (for advantage estimation)
+    num_ppo_epochs=1,
     whiten_rewards=False,       # Most RLHF doesn't whiten
-    kl_coef=0.05,               # Initial KL penalty coefficient
+    kl_coef=0.01,               # Initial KL penalty coefficient
     cliprange=0.2,
     vf_coef=0.1,
     cliprange_value=0.2,
     gamma=1.0,
     lam=0.95,
-    temperature=1.0,            # Or 0.7, as you like
+    temperature=1.2,            # Or 0.7, as you like
     exp_name="ppo_config",
     eval_strategy="steps",
     eval_steps=500,           # e.g. every 500 training steps
     eval_on_start=False,
     max_steps=3000,
+    save_safetensors=False,
+    save_strategy="steps",
+    save_steps=500,
+    save_total_limit=3,
 )
 
 ppo_trainer = PPOTrainer(
