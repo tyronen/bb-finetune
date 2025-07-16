@@ -223,7 +223,12 @@ eval_dataset_ppo = [
     for i, input_ids in enumerate(tokenized_eval_prompts["input_ids"])
 ]
 
-sample_prompt = train_prompts[0]
+sample_prompts = [train_prompts[0], train_prompts[1], train_prompts[2]]
+
+callbacks = [
+    GenerationCallback(prompt, interval=50, tokenizer=tokenizer)
+    for prompt in sample_prompts
+]
 
 # ==== PPO Config ====
 ppo_config = PPOConfig(
@@ -269,8 +274,9 @@ ppo_trainer = PPOTrainer(
     value_model,            # value_model (usually None for LM RLHF)
     data_collator,            # data_collator (optional)
     eval_dataset_ppo,            # eval_dataset (optional)
-    None,
-    callbacks=[ GenerationCallback(sample_prompt, interval=50, tokenizer=tokenizer) ],
+    [None, None],
+    callbacks,
+    #callbacks=[ GenerationCallback(sample_prompt, interval=50, tokenizer=tokenizer) ],
 )
 
 # generation_kwargs = {
