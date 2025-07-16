@@ -1,17 +1,56 @@
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSequenceClassification, GenerationConfig, DataCollatorWithPadding
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSequenceClassification, GenerationConfig, DataCollatorWithPadding, TrainerCallback
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from trl import PPOTrainer, PPOConfig, AutoModelForCausalLMWithValueHead, create_reference_model
 from datasets import load_dataset
 from tqdm import tqdm
 import os
 import inspect
+from transformers import logging as hf_logging
+hf_logging.set_verbosity_error()
 
-# print(inspect.getfile(PPOTrainer))
-# print("trl version:", __import__('trl').__version__)
-# print("PPOTrainer:", PPOTrainer.__module__, PPOTrainer.__init__.__code__.co_varnames)
 
-# import sys; sys.exit()
+print(inspect.getfile(PPOTrainer))
+print("trl version:", __import__('trl').__version__)
+print("PPOTrainer:", PPOTrainer.__module__, PPOTrainer.__init__.__code__.co_varnames)
+
+import sys; sys.exit()
+
+class GenerationCallback(TrainerCallback):
+    def __init__(self, prompt: str, interval: int, tokenizer=None, max_new_tokens=64):
+        """
+        prompt:      the single prompt you want to sample from
+        interval:    only run every `interval` logging steps
+        tokenizer:   your tokenizer
+        max_new_tokens: how many tokens to generate
+        """
+        self.prompt = prompt
+        self.interval = interval
+        self.tokenizer = tokenizer
+        self.max_new_tokens = max_new_tokens
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        # `on_log` only fires when the Trainer logs (i.e. every logging_steps)
+        if state.global_step % self.interval == 0:
+            model = kwargs["model"]
+            model.eval()
+            with torch.no_grad():
+                inputs = self.tokenizer(
+                    self.prompt,
+                    return_tensors="pt",
+                    truncation=True,
+                    max_length=512
+                ).to(model.device)
+                out = model.generate(
+                    **inputs,
+                    max_new_tokens=self.max_new_tokens,
+                    pad_token_id=self.tokenizer.eos_token_id
+                )
+            gen = self.tokenizer.decode(out[0], skip_special_tokens=True)
+            # strip off the prompt if it echoes it back
+            summary = gen[len(self.prompt):].strip()
+            print(f"\n>>> [Step {state.global_step}] sample generation:\n{summary}\n")
+
 
 def force_return_dict_forward(self, *args, **kwargs):
     kwargs['return_dict'] = True
@@ -213,6 +252,8 @@ ppo_config = PPOConfig(
     save_strategy="steps",
     save_steps=500,
     save_total_limit=3,
+    logging_strategy="steps",     # log according to step counts
+    logging_steps=50,
 )
 
 ppo_trainer = PPOTrainer(
@@ -225,6 +266,8 @@ ppo_trainer = PPOTrainer(
     value_model,            # value_model (usually None for LM RLHF)
     data_collator,            # data_collator (optional)
     eval_dataset_ppo,            # eval_dataset (optional)
+    None,
+    callbacks=[ GenerationCallback(sample_prompt, interval=50, tokenizer=tokenizer) ],
 )
 
 # generation_kwargs = {
@@ -241,5 +284,4 @@ ppo_trainer.train()
 ppo_trainer.save_model(SAVE_PATH)
 
 final_model = os.path.join(SAVE_PATH, "ppo_policy_final")
-ppo_trainer.save_pretrained(final_model)
 print(f"Saved final PPO model to {final_model}")
