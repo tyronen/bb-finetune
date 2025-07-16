@@ -10,11 +10,12 @@ from transformers import logging as hf_logging
 hf_logging.set_verbosity_error()
 
 
-print(inspect.getfile(PPOTrainer))
-print("trl version:", __import__('trl').__version__)
-print("PPOTrainer:", PPOTrainer.__module__, PPOTrainer.__init__.__code__.co_varnames)
+# print(inspect.getfile(PPOTrainer))
+# print("trl version:", __import__('trl').__version__)
+# print("PPOTrainer:", PPOTrainer.__module__, PPOTrainer.__init__.__code__.co_varnames)
 
-import sys; sys.exit()
+# import sys; sys.exit()
+
 
 class GenerationCallback(TrainerCallback):
     def __init__(self, prompt: str, interval: int, tokenizer=None, max_new_tokens=64):
