@@ -7,9 +7,7 @@ from tqdm import tqdm
 import os
 import inspect
 from transformers import logging as hf_logging
-from transformers.trainer_callback import PrinterCallback
 hf_logging.set_verbosity_error()
-
 
 
 # print(inspect.getfile(PPOTrainer))
@@ -17,96 +15,6 @@ hf_logging.set_verbosity_error()
 # print("PPOTrainer:", PPOTrainer.__module__, PPOTrainer.__init__.__code__.co_varnames)
 
 # import sys; sys.exit()
-
-
-# class GenerationCallback(TrainerCallback):
-#     def __init__(self, prompt: str, interval: int, tokenizer=None, max_new_tokens=64):
-#         """
-#         prompt:      the single prompt you want to sample from
-#         interval:    only run every `interval` logging steps
-#         tokenizer:   your tokenizer
-#         max_new_tokens: how many tokens to generate
-#         """
-#         self.prompt = prompt
-#         self.interval = interval
-#         self.tokenizer = tokenizer
-#         self.max_new_tokens = max_new_tokens
-
-#     def on_log(self, args, state, control, logs=None, **kwargs):
-#         # `on_log` only fires when the Trainer logs (i.e. every logging_steps)
-#         if state.global_step % self.interval == 0:
-#             model = kwargs["model"]
-#             model.eval()
-#             with torch.no_grad():
-#                 inputs = self.tokenizer(
-#                     self.prompt,
-#                     return_tensors="pt",
-#                     truncation=True,
-#                     max_length=512
-#                 ).to(model.device)
-#                 out = model.generate(
-#                     **inputs,
-#                     max_new_tokens=self.max_new_tokens,
-#                     pad_token_id=self.tokenizer.eos_token_id
-#                 )
-#             gen = self.tokenizer.decode(out[0], skip_special_tokens=True)
-#             # strip off the prompt if it echoes it back
-#             summary = gen[len(self.prompt):].strip()
-#             print(f"\n>>> [Step {state.global_step}] Sample generation:\n{summary}\n")
-
-class GenerationCallback(TrainerCallback):
-    def __init__(self, prompt: str, interval: int, tokenizer=None, max_new_tokens=64):
-        self.prompt         = prompt
-        self.interval       = interval
-        self.tokenizer      = tokenizer
-        self.max_new_tokens = max_new_tokens
-
-    def on_log(self, args, state, control, logs=None, **kwargs):
-        # only run on multiples of `interval`
-        if state.global_step % self.interval != 0:
-            return
-
-        wrapper = kwargs["model"]
-
-        # 1) strip off any DDP / Accelerate wrapper
-        if hasattr(wrapper, "module"):
-            wrapper = wrapper.module
-
-        # 2) strip off TRL's PolicyAndValueWrapper: get the pure policy LM
-        #    TRL names it .policy_model, so:
-        lm = getattr(wrapper, "policy_model", None) or wrapper
-
-        # 3) if that LM itself is wrapped again, strip its .module
-        if hasattr(lm, "module"):
-            lm = lm.module
-
-        # now `lm` should be your AutoModelForCausalLMWithValueHead
-        lm.eval()
-
-        # move inputs to the same device
-        device = next(lm.parameters()).device
-        inputs = self.tokenizer(
-            self.prompt,
-            return_tensors="pt",
-            truncation=True,
-            max_length=512,
-        )
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-
-        # actually generate
-        with torch.no_grad():
-            out = lm.generate(
-                **inputs,
-                max_new_tokens=self.max_new_tokens,
-                pad_token_id=self.tokenizer.eos_token_id,
-            )
-
-        # decode & print
-        gen = self.tokenizer.decode(out[0], skip_special_tokens=True)
-        summary = gen[len(self.prompt):].strip()
-        print(f"\n>>> [Step {state.global_step}] Sample generation:\n{summary}\n")
-
-
 
 def force_return_dict_forward(self, *args, **kwargs):
     kwargs['return_dict'] = True
@@ -244,7 +152,7 @@ reward_model.to(device)
 # ==== Dataset ====
 train_dataset = load_dataset("CarperAI/openai_summarize_tldr", split="train")
 #prompts = [item["prompt"] for item in dataset]
-train_prompts = [item["prompt"] for item in train_dataset][:100]  # use only 100 for quick test
+train_prompts = [item["prompt"] for item in train_dataset]  # use only 100 for quick test
 
 tokenized_prompts = tokenizer(
     train_prompts,
@@ -259,7 +167,7 @@ prompts = [
     for i, input_ids in enumerate(tokenized_prompts["input_ids"])
 ]
 
-N_EVAL = 100
+N_EVAL = 2000
 
 eval_dataset = load_dataset("CarperAI/openai_summarize_tldr", split="valid")
 eval_prompts = [item["prompt"] for item in eval_dataset][:N_EVAL]  # e.g., first 100 for quick eval
@@ -278,12 +186,6 @@ eval_dataset_ppo = [
     for i, input_ids in enumerate(tokenized_eval_prompts["input_ids"])
 ]
 
-sample_prompts = [train_prompts[0], train_prompts[1], train_prompts[2]]
-
-callbacks = [
-    GenerationCallback(prompt, interval=10, tokenizer=tokenizer)
-    for prompt in sample_prompts
-]
 
 # ==== PPO Config ====
 ppo_config = PPOConfig(
@@ -310,7 +212,7 @@ ppo_config = PPOConfig(
     eval_strategy="steps",
     eval_steps=500,           # e.g. every 500 training steps
     eval_on_start=False,
-    max_steps=3000,
+    max_steps=9000,
     save_safetensors=False,
     save_strategy="steps",
     save_steps=500,
@@ -318,7 +220,6 @@ ppo_config = PPOConfig(
     logging_strategy="steps",     # log according to step counts
     logging_steps=500,
     disable_tqdm=False,
-    
 )
 
 ppo_trainer = PPOTrainer(
@@ -331,9 +232,6 @@ ppo_trainer = PPOTrainer(
     value_model,            # value_model (usually None for LM RLHF)
     data_collator,            # data_collator (optional)
     eval_dataset_ppo,            # eval_dataset (optional)
-    [None, None],
-    callbacks,
-    #callbacks=[ GenerationCallback(sample_prompt, interval=50, tokenizer=tokenizer) ],
 )
 
 # generation_kwargs = {
@@ -344,8 +242,6 @@ ppo_trainer = PPOTrainer(
 #     "pad_token_id": tokenizer.eos_token_id,
 #     "max_new_tokens": 20,
 # }
-
-ppo_trainer.callback_handler.remove_callback(PrinterCallback)
 
 ppo_trainer.train()
 
