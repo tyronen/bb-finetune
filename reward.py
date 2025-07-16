@@ -50,24 +50,24 @@ class PairwiseDataset(Dataset):
         for pair in tqdm(pairs):
             chosen, rejected = pair["chosen"], pair["rejected"]
             chosen_encodings_dict = tokenizer(
-                "<|startoftext|>" + chosen + "<|endoftext|>",
+                chosen + "<|endoftext|>",
                 truncation=True,
                 max_length=max_length,
                 padding="max_length",
                 return_tensors="pt",
             )
             rejected_encodings_dict = tokenizer(
-                "<|startoftext|>" + rejected + "<|endoftext|>",
+                rejected + "<|endoftext|>",
                 truncation=True,
                 max_length=max_length,
                 padding="max_length",
                 return_tensors="pt",
             )
             if not torch.all(
-                torch.eq(
-                    chosen_encodings_dict["input_ids"],
-                    rejected_encodings_dict["input_ids"],
-                )
+                    torch.eq(
+                        chosen_encodings_dict["input_ids"],
+                        rejected_encodings_dict["input_ids"],
+                    )
             ).item():
                 self.chosen_input_ids.append(chosen_encodings_dict["input_ids"])
                 self.chosen_attn_masks.append(chosen_encodings_dict["attention_mask"])
@@ -103,15 +103,15 @@ class QwenRewardModel(nn.Module):
         self.PAD_ID = self.tokenizer(self.tokenizer.pad_token)["input_ids"][0]
 
     def forward(
-        self,
-        input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
+            self,
+            input_ids=None,
+            past_key_values=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            labels=None,
     ):
         model_outputs = self.model(
             input_ids,
@@ -217,24 +217,30 @@ def main():
     if not os.path.exists(utils.REWARD_DIR):
         os.mkdir(utils.REWARD_DIR)
 
+    per_device_batch_size = 4
+    gradient_accumulation_steps = 4
     training_args = TrainingArguments(
         bf16=True,
         dataloader_pin_memory=True,
-        eval_accumulation_steps=1,
         eval_steps=10000,
+        eval_accumulation_steps=gradient_accumulation_steps,
         eval_strategy="steps",
-        gradient_accumulation_steps=1,
-        learning_rate=1e-5,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        learning_rate=2e-4,
+        lr_scheduler_kwargs={"min_lr": 1e-6},
+        lr_scheduler_type="cosine_with_min_lr",
         logging_steps=1000,
+        max_grad_norm=1.0,
         num_train_epochs=1,
         output_dir=utils.REWARD_DIR,
-        per_device_eval_batch_size=1,
-        per_device_train_batch_size=1,
+        per_device_eval_batch_size=per_device_batch_size,
+        per_device_train_batch_size=per_device_batch_size,
         remove_unused_columns=False,
         report_to="wandb",
         save_steps=0,
         save_strategy="no",
-        warmup_steps=100,
+        warmup_steps=500,
+        weight_decay=0.01,
     )
 
     # Initialize the reward model from the (supervised) fine-tuned Qwen
@@ -242,8 +248,8 @@ def main():
         utils.SFT_DIR, torch_dtype=torch.bfloat16
     )
     lora_cfg = LoraConfig(
-        r=8,  # rank of LoRA matrices
-        lora_alpha=32,
+        r=32,  # rank of LoRA matrices
+        lora_alpha=64,
         lora_dropout=0.05,
         bias="none",
         task_type="CAUSAL_LM",
@@ -253,6 +259,7 @@ def main():
     model = get_peft_model(model, lora_cfg)
     model.gradient_checkpointing_enable()
     model = QwenRewardModel(model)
+    torch.nn.init.normal_(model.v_head.weight, std=0.01)
     model.to(device)
 
     # Make pairwise datasets for training
