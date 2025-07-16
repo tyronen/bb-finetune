@@ -50,7 +50,7 @@ class GenerationCallback(TrainerCallback):
             gen = self.tokenizer.decode(out[0], skip_special_tokens=True)
             # strip off the prompt if it echoes it back
             summary = gen[len(self.prompt):].strip()
-            print(f"\n>>> [Step {state.global_step}] sample generation:\n{summary}\n")
+            print(f"\n>>> [Step {state.global_step}] Sample generation:\n{summary}\n")
 
 
 def force_return_dict_forward(self, *args, **kwargs):
@@ -223,6 +223,13 @@ eval_dataset_ppo = [
     for i, input_ids in enumerate(tokenized_eval_prompts["input_ids"])
 ]
 
+sample_prompts = [train_prompts[0], train_prompts[1], train_prompts[2]] 
+
+callbacks = [
+    GenerationCallback(prompt, interval=50, tokenizer=tokenizer)
+    for prompt in sample_prompts
+]
+
 # ==== PPO Config ====
 ppo_config = PPOConfig(
     output_dir=SAVE_PATH,                # Where to save checkpoints
@@ -268,7 +275,7 @@ ppo_trainer = PPOTrainer(
     data_collator,            # data_collator (optional)
     eval_dataset_ppo,            # eval_dataset (optional)
     None,
-    callbacks=[ GenerationCallback(sample_prompt, interval=50, tokenizer=tokenizer) ],
+    callbacks=callbacks,
 )
 
 # generation_kwargs = {
