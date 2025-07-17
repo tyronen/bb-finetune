@@ -12,6 +12,7 @@ DATA_DIR = "data"
 TMP_DIR = "/dev/shm/.cache"
 SFT_DIR = "data/sft"
 REWARD_DIR = "data/reward"
+PPO_DIR = "data/ppo"
 max_input_length = 550
 
 

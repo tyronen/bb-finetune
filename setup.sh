@@ -13,8 +13,10 @@ if [[ -n "$SSH_CONNECTION" && -d /workspace ]]; then
   set -a
   export HF_HOME="/workspace/.cache"
   export HF_DATASETS_CACHE="/dev/shm/.cache/datasets_cache"
+  export PIP_CACHE_DIR=/workspace/pip_cache
   mkdir -p $HF_HOME
   mkdir -p $HF_DATASETS_CACHE
+  mkdir -p $PIP_CACHE_DIR
   set +a
 fi
 
@@ -44,5 +46,5 @@ numpy==$NUMPY_VERSION
 EOL
 
 echo "🎉 Success! 'constraints.txt' has been created."
-
-pip install -r requirements.txt -c constraints.txt
+#pip install -r requirements.txt -c constraints.txt
+# or ./setup_5090.sh on 5090
