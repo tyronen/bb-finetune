@@ -78,8 +78,8 @@ def evaluate_policy(policy_model, eval_prompts):
         if len(examples) < 1:
             examples.append((prompt, summary))
     avg_reward = sum(rewards) / len(rewards)
-    print(f"[Eval] Average reward: {avg_reward:.3f}")
-    print(f"[Eval] Example summary:\nPrompt: {examples[0][0]}\nSummary: {examples[0][1]}\n")
+    print(f"Average reward: {avg_reward:.3f}")
+    print(f"Prompt: {examples[0][0]}\n\nSummary: {examples[0][1]}\n")
     policy_model.train()
     return avg_reward
 
@@ -122,7 +122,7 @@ mini_batch_size = 1      # for advantage estimation
 ppo_epochs = 4           # number of PPO epochs over each batch
 gamma = 1.0              # reward discount (unused if no discounting)
 kl_coef = 0.02           # KL penalty coefficient
-value_coef = 0.5 
+value_coef = 0.5
 max_new_tokens = 64
 eval_interval = 100     # batches between evaluations
 num_eval_prompts = 50    # number of eval prompts
