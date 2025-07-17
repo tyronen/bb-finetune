@@ -73,7 +73,7 @@ def evaluate_policy(policy_model, eval_prompts):
             )
         gen = tokenizer.decode(out[0], skip_special_tokens=True)
         summary = gen[len(prompt):].strip()
-        rew = get_reward(prompt, summary).item()
+        rew = get_reward([prompt], [summary]).item()
         rewards.append(rew)
         if len(examples) < 1:
             examples.append((prompt, summary))
