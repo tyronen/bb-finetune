@@ -145,7 +145,7 @@ model.train()
 
 
 train_data = load_dataset("OpenAssistant/oasst1", split="train")
-val_data = load_dataset("OpenAssistant/oasst1", split="validation[:40]")
+val_data = load_dataset("OpenAssistant/oasst1", split="validation[:20]")
 
 train_pairs = build_prompt_response_pairs(train_data)
 val_pairs = build_prompt_response_pairs(val_data)
