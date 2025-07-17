@@ -5,11 +5,10 @@ from trl import PPOTrainer, PPOConfig, AutoModelForCausalLMWithValueHead, create
 from datasets import load_dataset
 from tqdm import tqdm
 import os
-import inspect
 from transformers import logging as hf_logging
 hf_logging.set_verbosity_error()
 
-
+# import inspect
 # print(inspect.getfile(PPOTrainer))
 # print("trl version:", __import__('trl').__version__)
 # print("PPOTrainer:", PPOTrainer.__module__, PPOTrainer.__init__.__code__.co_varnames)
