@@ -63,7 +63,6 @@ def set_seed(seed_val=42):
 
 bertscore = evaluate.load("bertscore")
 bleu = evaluate.load("bleu")
-meteor = evaluate.load("meteor")
 
 def compute_metrics(eval_preds):
     label_ids = eval_preds.label_ids
@@ -72,14 +71,12 @@ def compute_metrics(eval_preds):
     label_str = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
     bertscore_result = bertscore.compute(predictions=pred_str, references=label_str, lang="en")
     bleu_result = bleu.compute(predictions=pred_str, references=[[x] for x in label_str])
-    meteor_result = meteor.compute(predictions=pred_str, references=label_str)
     # BERTScore returns dict with precision, recall, f1 lists; take means for reporting
     return {
         "bertscore_precision": sum(bertscore_result['precision']) / len(bertscore_result['precision']),
         "bertscore_recall": sum(bertscore_result['recall']) / len(bertscore_result['recall']),
         "bertscore_f1": sum(bertscore_result['f1']) / len(bertscore_result['f1']),
         "bleu": bleu_result["bleu"],
-        "meteor": meteor_result["meteor"],
     }
 
 def print_sample_generations(model, tokenizer, n=5):
@@ -138,7 +135,7 @@ model.train()
 
 
 train_data = load_dataset("OpenAssistant/oasst1", split="train")
-val_data = load_dataset("OpenAssistant/oasst1", split="validation")
+val_data = load_dataset("OpenAssistant/oasst1", split="validation[:100]")
 
 train_pairs = build_prompt_response_pairs(train_data)
 val_pairs = build_prompt_response_pairs(val_data)
