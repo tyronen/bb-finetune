@@ -69,8 +69,12 @@ def evaluate_normalized_reward_score(
         )
 
         # Generate model output
+        device = next(model.parameters()).device
+        attention_mask = sample["attention_mask"].unsqueeze(0).to(device)
         response_token_ids = model.generate(
-            input_ids=input_ids, generation_config=generation_config
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            generation_config=generation_config,
         )
         generated_text = tokenizer.decode(
             response_token_ids[0], skip_special_tokens=True

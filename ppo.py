@@ -1,3 +1,5 @@
+import time
+
 import torch
 from datasets import load_dataset
 from transformers import (
@@ -59,18 +61,19 @@ def build_dataset(
                 if col not in ("input_ids", "attention_mask", "query", "label")
             ]
         )
-        return split
-
-    dataset["train"] = preprocess(dataset["train"].select(range(1200)))
-    dataset["valid"] = preprocess(dataset["valid"].select(range(60)))
-    dataset["test"] = preprocess(dataset["test"].select(range(60)))
-    # Convert just the tensor fields
-    for split in ("train", "valid"):
-        dataset[split] = dataset[split].remove_columns(["query", "label"])
-        dataset[split].set_format(
+        split.set_format(
             type="torch",
             columns=["input_ids", "attention_mask"],
+            output_all_columns=True,
         )
+
+        return split
+
+    dataset["train"] = preprocess(dataset["train"].select(range(600)))
+    dataset["valid"] = preprocess(dataset["valid"].select(range(30)))
+    dataset["test"] = preprocess(dataset["test"].select(range(30)))
+    for split in ("train", "valid"):
+        dataset[split] = dataset[split].remove_columns(["query", "label"])
 
     return dataset
 
@@ -129,11 +132,9 @@ def main():
     )
     rw_model.config.return_dict = True
     print(rw_model.config.id2label)
-    #
-    # mean, std = utils.evaluate_normalized_reward_score(
-    #     model, rw_model, rw_tokenizer, dataset["test"], tokenizer, num_samples=100
-    # )
-    # print(f"mean: {mean} std: {std}")
+    mean, std = utils.evaluate_normalized_reward_score(
+        ref_model, rw_model, rw_tokenizer, dataset["test"], tokenizer, num_samples=20
+    )
     value_model = AutoModelForSequenceClassification.from_pretrained(
         utils.SFT_DIR,
         device_map="auto",
@@ -146,13 +147,14 @@ def main():
     learning_rate = 1.41e-5
     max_ppo_epochs = 1
     mini_batch_size = 1
-    batch_size = 1
+    batch_size = 4
 
     config = PPOConfig(
         learning_rate=learning_rate,
         num_ppo_epochs=max_ppo_epochs,
         mini_batch_size=mini_batch_size,
         batch_size=batch_size,
+        report_to="wandb",
     )
 
     ppo_trainer = PPOTrainer(
@@ -170,13 +172,19 @@ def main():
     )
 
     # Use the built‑in training loop
+    start = time.time()
     ppo_trainer.train()
+    end = time.time()
+    print(f"WALL CLOCK training time: {end - start:.2f} seconds")
     ppo_trainer.save_model(utils.PPO_DIR)
     ppo_trainer.generate_completions()
+
+    print(f"Ref model: mean: {mean} std: {std}")
+
     mean, std = utils.evaluate_normalized_reward_score(
         ppo_model, rw_model, rw_tokenizer, dataset["test"], tokenizer, num_samples=20
     )
-    print(f"mean: {mean} std: {std}")
+    print(f"PPO model: mean: {mean} std: {std}")
 
 
 if __name__ == "__main__":
