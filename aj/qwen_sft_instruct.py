@@ -111,9 +111,9 @@ train_batch_size = 8  # reduced due to larger model size
 gradient_accumulation_steps = 4  # helps simulate batch size 16
 learning_rate = 1e-5
 eval_batch_size = 2
-eval_steps = 5
+eval_steps = 500
 max_input_length = 1024
-save_steps = 1000
+save_steps = 500
 num_train_epochs = 1
 
 set_seed(42)
