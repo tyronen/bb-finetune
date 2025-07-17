@@ -30,7 +30,7 @@ eval_samples = 100  # number of eval prompts from the end
 
 # PPO/Trainer params
 per_device_train_batch_size = 2
-gradient_accumulation_steps = 2
+gradient_accumulation_steps = 1
 learning_rate = 3e-6
 num_ppo_epochs = 1
 total_episodes = 10000
@@ -57,7 +57,7 @@ ppo_args = PPOConfig(
     num_ppo_epochs=num_ppo_epochs,
     logging_steps=100,
     fp16=True,
-    bf16=False,
+    bf16=True,
     batch_size=2,              # PPO batch size (outer loop)
     mini_batch_size=1,          # PPO mini batch (for advantage estimation)
     whiten_rewards=False,       # Most RLHF doesn't whiten
