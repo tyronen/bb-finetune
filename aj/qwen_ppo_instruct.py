@@ -29,7 +29,7 @@ prompt_column = "text"
 eval_samples = 100  # number of eval prompts from the end
 
 # PPO/Trainer params
-per_device_train_batch_size = 2
+per_device_train_batch_size = 1
 gradient_accumulation_steps = 1
 learning_rate = 3e-6
 num_ppo_epochs = 1
@@ -56,9 +56,9 @@ ppo_args = PPOConfig(
     total_episodes=total_episodes,
     num_ppo_epochs=num_ppo_epochs,
     logging_steps=100,
-    fp16=True,
+    fp16=False,
     bf16=True,
-    batch_size=2,              # PPO batch size (outer loop)
+    batch_size=1,              # PPO batch size (outer loop)
     mini_batch_size=1,          # PPO mini batch (for advantage estimation)
     whiten_rewards=False,       # Most RLHF doesn't whiten
     kl_coef=0.01,               # Initial KL penalty coefficient
@@ -71,6 +71,9 @@ ppo_args = PPOConfig(
     exp_name="ppo_config",
     eval_strategy="steps",
     eval_steps=10,           # e.g. every 500 training steps
+    save_strategy="steps",   # or "epoch" if you want to save every epoch
+    save_steps=1000,          # save every 250 steps, adjust as desired
+    save_total_limit=3,      # keep last 3 checkpoints (optional)
 )
 
 # ========== MODEL AND TOKENIZER LOADING =========
