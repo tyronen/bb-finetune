@@ -85,15 +85,15 @@ def evaluate_policy(policy_model, eval_prompts):
 
 
 def collate_fn(batch):
-    texts = batch  # batch is a list of token lists
+    # batch: list of strings (prompts)
     enc = tokenizer(
-        texts,               # these should be text strings, not token ids
+        batch,
         padding=True,
         truncation=True,
         max_length=512,
         return_tensors='pt'
     )
-    return enc['input_ids']
+    return enc['input_ids'], enc['attention_mask']
 
 # def force_return_dict_forward(self, *args, **kwargs):
 #     kwargs['return_dict'] = True
@@ -190,15 +190,21 @@ eval_prompts = [x['prompt'] for x in eval_data][:num_eval_prompts]
 
 # === PPO training loop ===
 optimizer = torch.optim.Adam(policy_model.parameters(), lr=learning_rate)
+MAX_STEPS = 9000
 
 if __name__ == '__main__':
-    # Wrap the training loader in tqdm for progress bar
-    for step, input_ids in enumerate(tqdm(train_dataloader, desc="PPO Training", unit="batch"), 1):
+    for step, (input_ids, attention_mask) in enumerate(tqdm(train_dataloader, desc="PPO Training", unit="batch"), 1):
+        if step > MAX_STEPS:
+            print(f"Reached max steps: {MAX_STEPS}. Stopping training.")
+            break
+
         input_ids = input_ids.to(device)
+        attention_mask = attention_mask.to(device)
 
         # ---- Generate ----
         gen_out = policy_model.model.generate(
             input_ids=input_ids,
+            attention_mask=attention_mask,
             max_new_tokens=max_new_tokens,
             do_sample=True,
             top_k=0,
@@ -209,16 +215,17 @@ if __name__ == '__main__':
             pad_token_id=tokenizer.pad_token_id,
         )
         seqs = gen_out.sequences
-        prompt_lens = input_ids.size(1)
+        prompt_lens = attention_mask.sum(dim=1)  # Each prompt's actual length
+
         responses = [
-            tokenizer.decode(seqs[i, prompt_lens:], skip_special_tokens=True)
+            tokenizer.decode(seqs[i, prompt_lens[i]:], skip_special_tokens=True)
             for i in range(seqs.size(0))
         ]
 
         # ---- Old logprobs & values ----
         old_logprobs = []
         for idx, logits in enumerate(gen_out.scores):
-            tokens = seqs[:, input_ids.size(1) + idx]
+            tokens = seqs[:, prompt_lens.max() + idx]  # use max prompt len for all
             logp = torch.log_softmax(logits, dim=-1)
             old_logprobs.append(logp.gather(-1, tokens.unsqueeze(-1)).squeeze(-1))
         old_logprobs = torch.stack(old_logprobs, dim=1).sum(1)
@@ -226,7 +233,7 @@ if __name__ == '__main__':
         old_values = old_values.detach()
 
         # ---- Reward & advantages ----
-        prompts = [tokenizer.decode(input_ids[i], skip_special_tokens=True) for i in range(input_ids.size(0))]
+        prompts = [tokenizer.decode(input_ids[i, :prompt_lens[i]], skip_special_tokens=True) for i in range(input_ids.size(0))]
         rewards = get_reward(prompts, responses).detach()
         advantages = rewards - old_values
         returns = rewards
@@ -235,8 +242,8 @@ if __name__ == '__main__':
         for _ in range(ppo_epochs):
             logits, values = policy_model(input_ids=seqs)
             new_logprobs = []
-            for idx, logit in enumerate(logits[:, input_ids.size(1):, :].unbind(1)):
-                tokens = seqs[:, input_ids.size(1) + idx]
+            for idx, logit in enumerate(logits[:, prompt_lens.max():, :].unbind(1)):
+                tokens = seqs[:, prompt_lens.max() + idx]
                 logp = torch.log_softmax(logit, dim=-1)
                 new_logprobs.append(logp.gather(-1, tokens.unsqueeze(-1)).squeeze(-1))
             new_logprobs = torch.stack(new_logprobs, dim=1).sum(1)
