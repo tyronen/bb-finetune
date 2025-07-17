@@ -1,5 +1,6 @@
 # new ignores
 ben_dev/data/
+ben_dev/models/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
