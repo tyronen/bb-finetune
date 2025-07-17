@@ -1,11 +1,11 @@
 import logging
 from contextlib import nullcontext
+from copy import deepcopy
 
 import numpy as np
 import torch
 from torch.amp import autocast, GradScaler
 from tqdm import tqdm
-from transformers import GenerationConfig
 
 BASE = "Qwen/Qwen3-0.6B"
 DATA_DIR = "data"
@@ -47,34 +47,31 @@ def evaluate_normalized_reward_score(
     """
     max_new_tokens = 100
     rewards = []
-    device = get_device()
     reward_model.eval()
 
     for i, sample in tqdm(enumerate(dataset), total=min(num_samples, len(dataset))):
         if i >= num_samples:
             break
 
-        input_text = sample["query"]
+        input_text = tokenizer.decode(sample["input_ids"], skip_special_tokens=True)
         reference_summary = sample["label"]
 
-        input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(device)
-
-        generation_config = GenerationConfig(
-            max_new_tokens=max_new_tokens,
-            do_sample=True,
-            top_k=0,
-            top_p=1.0,
-            pad_token_id=tokenizer.pad_token_id,
-            eos_token_id=tokenizer.eos_token_id,
-        )
+        gen_cfg = deepcopy(model.generation_config)
+        gen_cfg.max_new_tokens = max_new_tokens
+        gen_cfg.do_sample = True
+        gen_cfg.top_k = 0
+        gen_cfg.top_p = 1.0
+        gen_cfg.pad_token_id = tokenizer.pad_token_id
+        gen_cfg.eos_token_id = tokenizer.eos_token_id
 
         # Generate model output
         device = next(model.parameters()).device
+        input_ids = sample["input_ids"].unsqueeze(0).to(device)
         attention_mask = sample["attention_mask"].unsqueeze(0).to(device)
         response_token_ids = model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            generation_config=generation_config,
+            generation_config=gen_cfg,
         )
         generated_text = tokenizer.decode(
             response_token_ids[0], skip_special_tokens=True
