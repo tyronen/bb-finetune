@@ -34,6 +34,7 @@ class OASSTDataset(Dataset):
             "labels": labels
         }
 
+
 def build_prompt_response_pairs(dataset):
     # Build message_id -> item map for fast lookup
     id_to_msg = {msg['message_id']: msg for msg in dataset}
@@ -42,8 +43,11 @@ def build_prompt_response_pairs(dataset):
     for msg in dataset:
         if msg["role"] == "assistant":
             parent_id = msg.get("parent_id")
-            if parent_id and id_to_msg[parent_id]["role"] == "user":
-                prompt = id_to_msg[parent_id]["text"]
+            if not parent_id:
+                continue
+            parent = id_to_msg.get(parent_id)
+            if parent and parent["role"] == "prompter":
+                prompt = parent["text"]
                 response = msg["text"]
                 pairs.append({"prompt": prompt, "response": response})
 
@@ -57,6 +61,42 @@ def set_seed(seed_val=42):
     torch.cuda.manual_seed_all(seed_val)
 
 
+bertscore = evaluate.load("bertscore")
+bleu = evaluate.load("bleu")
+meteor = evaluate.load("meteor")
+
+def compute_metrics(eval_preds):
+    label_ids = eval_preds.label_ids
+    pred_ids = eval_preds.predictions
+    pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+    label_str = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
+    bertscore_result = bertscore.compute(predictions=pred_str, references=label_str, lang="en")
+    bleu_result = bleu.compute(predictions=pred_str, references=[[x] for x in label_str])
+    meteor_result = meteor.compute(predictions=pred_str, references=label_str)
+    # BERTScore returns dict with precision, recall, f1 lists; take means for reporting
+    return {
+        "bertscore_precision": sum(bertscore_result['precision']) / len(bertscore_result['precision']),
+        "bertscore_recall": sum(bertscore_result['recall']) / len(bertscore_result['recall']),
+        "bertscore_f1": sum(bertscore_result['f1']) / len(bertscore_result['f1']),
+        "bleu": bleu_result["bleu"],
+        "meteor": meteor_result["meteor"],
+    }
+
+def print_sample_generations(model, tokenizer, n=5):
+    model.eval()
+    for i in range(n):
+        sample = random.choice(val_pairs)
+        prompt = sample["prompt"]
+        input_text = f"User: {prompt}\nAssistant:"
+        inputs = tokenizer(input_text, return_tensors="pt").to(device)
+        with torch.no_grad():
+            output = model.generate(**inputs, max_new_tokens=128, do_sample=True, temperature=0.7, top_p=0.95)
+        print("\n---")
+        print("Prompt:", prompt)
+        print("Reference:", sample["response"])
+        print("Model:", tokenizer.decode(output[0], skip_special_tokens=True))
+
+
 # Hyperparameters and output settings
 device = "cuda" if torch.cuda.is_available() else "cpu"
 output_dir = "./qwen-sft-instruct-checkpoint"
@@ -64,10 +104,10 @@ train_batch_size = 4  # reduced due to larger model size
 gradient_accumulation_steps = 4  # helps simulate batch size 16
 learning_rate = 1e-5
 eval_batch_size = 1
-eval_steps = 1000
+eval_steps = 2
 max_input_length = 1024
 save_steps = 1000
-num_train_epochs = 2
+num_train_epochs = 1
 
 set_seed(42)
 
@@ -99,55 +139,14 @@ model.train()
 
 train_data = load_dataset("OpenAssistant/oasst1", split="train")
 val_data = load_dataset("OpenAssistant/oasst1", split="validation")
-print(train_data[0])
-print(val_data[0])
+
 train_pairs = build_prompt_response_pairs(train_data)
 val_pairs = build_prompt_response_pairs(val_data)
-print(train_pairs[0])
-print(val_pairs[0])
-train_dataset = OASSTDataset(train_pairs, tokenizer, max_length=1024)
-val_dataset = OASSTDataset(val_pairs, tokenizer, max_length=1024)
 
 print(f"Train pairs: {len(train_pairs)}, Val pairs: {len(val_pairs)}")
-print(train_pairs[0])
-print(val_pairs[0])
 
-
-bertscore = evaluate.load("bertscore")
-bleu = evaluate.load("bleu")
-meteor = evaluate.load("meteor")
-
-def compute_metrics(eval_preds):
-    label_ids = eval_preds.label_ids
-    pred_ids = eval_preds.predictions
-    pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-    label_str = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
-    bertscore_result = bertscore.compute(predictions=pred_str, references=label_str, lang="en")
-    bleu_result = bleu.compute(predictions=pred_str, references=[[x] for x in label_str])
-    meteor_result = meteor.compute(predictions=pred_str, references=label_str)
-    # BERTScore returns dict with precision, recall, f1 lists; take means for reporting
-    return {
-        "bertscore_precision": sum(bertscore_result['precision']) / len(bertscore_result['precision']),
-        "bertscore_recall": sum(bertscore_result['recall']) / len(bertscore_result['recall']),
-        "bertscore_f1": sum(bertscore_result['f1']) / len(bertscore_result['f1']),
-        "bleu": bleu_result["bleu"],
-        "meteor": meteor_result["meteor"],
-    }
-
-def print_sample_generations(model, tokenizer, n=5):
-    import random
-    model.eval()
-    for i in range(n):
-        sample = random.choice(val_pairs)
-        prompt = sample["prompt"]
-        input_text = f"User: {prompt}\nAssistant:"
-        inputs = tokenizer(input_text, return_tensors="pt").to(device)
-        with torch.no_grad():
-            output = model.generate(**inputs, max_new_tokens=128, do_sample=True, temperature=0.7, top_p=0.95)
-        print("\n---")
-        print("Prompt:", prompt)
-        print("Reference:", sample["response"])
-        print("Model:", tokenizer.decode(output[0], skip_special_tokens=True))
+train_dataset = OASSTDataset(train_pairs, tokenizer, max_length=1024)
+val_dataset = OASSTDataset(val_pairs, tokenizer, max_length=1024)
 
 
 training_args = TrainingArguments(
@@ -171,7 +170,6 @@ training_args = TrainingArguments(
     warmup_steps=100,
     eval_steps=eval_steps,
     save_steps=save_steps,
-    max_steps=6000,  
     load_best_model_at_end=True,
     logging_steps=50,
     report_to="none",  # disable W&B or others unless configured
