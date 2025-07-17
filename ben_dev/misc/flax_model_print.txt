@@ -1,0 +1,209 @@
+🔍 JAX/Flax Model Inspection
+==================================================
+Model type: <class 'transformers.models.gpt2.modeling_flax_gpt2.FlaxGPT2LMHeadModel'>
+Model config: GPT2Config {
+  "activation_function": "gelu_new",
+  "architectures": [
+    "GPT2LMHeadModel"
+  ],
+  "attn_pdrop": 0.1,
+  "bos_token_id": 50256,
+  "embd_pdrop": 0.1,
+  "eos_token_id": 50256,
+  "initializer_range": 0.02,
+  "layer_norm_epsilon": 1e-05,
+  "model_type": "gpt2",
+  "n_ctx": 1024,
+  "n_embd": 768,
+  "n_head": 12,
+  "n_inner": null,
+  "n_layer": 12,
+  "n_positions": 1024,
+  "pad_token_id": 50256,
+  "reorder_and_upcast_attn": false,
+  "resid_pdrop": 0.1,
+  "scale_attn_by_inverse_layer_idx": false,
+  "scale_attn_weights": true,
+  "summary_activation": null,
+  "summary_first_dropout": 0.1,
+  "summary_proj_to_labels": true,
+  "summary_type": "cls_index",
+  "summary_use_proj": true,
+  "task_specific_params": {
+    "text-generation": {
+      "do_sample": true,
+      "max_length": 50
+    }
+  },
+  "transformers_version": "4.53.2",
+  "use_cache": true,
+  "vocab_size": 50257
+}
+
+Vocab size: 50257
+Hidden size: 768
+Number of layers: 12
+Number of attention heads: 12
+
+📊 Parameter Analysis
+==============================
+Total parameters: 124,439,808
+Total parameters (millions): 124.44M
+
+🏗️ Parameter Structure
+=========================
+transformer.h.0.attn.c_attn.bias: (2304,) (float32)
+transformer.h.0.attn.c_attn.kernel: (2304, 768) (float32)
+transformer.h.0.attn.c_proj.bias: (768,) (float32)
+transformer.h.0.attn.c_proj.kernel: (768, 768) (float32)
+transformer.h.0.ln_1.bias: (768,) (float32)
+transformer.h.0.ln_1.scale: (768,) (float32)
+transformer.h.0.ln_2.bias: (768,) (float32)
+transformer.h.0.ln_2.scale: (768,) (float32)
+transformer.h.0.mlp.c_fc.bias: (3072,) (float32)
+transformer.h.0.mlp.c_fc.kernel: (3072, 768) (float32)
+transformer.h.0.mlp.c_proj.bias: (768,) (float32)
+transformer.h.0.mlp.c_proj.kernel: (768, 3072) (float32)
+transformer.h.1.attn.c_attn.bias: (2304,) (float32)
+transformer.h.1.attn.c_attn.kernel: (2304, 768) (float32)
+transformer.h.1.attn.c_proj.bias: (768,) (float32)
+transformer.h.1.attn.c_proj.kernel: (768, 768) (float32)
+transformer.h.1.ln_1.bias: (768,) (float32)
+transformer.h.1.ln_1.scale: (768,) (float32)
+transformer.h.1.ln_2.bias: (768,) (float32)
+transformer.h.1.ln_2.scale: (768,) (float32)
+transformer.h.1.mlp.c_fc.bias: (3072,) (float32)
+transformer.h.1.mlp.c_fc.kernel: (3072, 768) (float32)
+transformer.h.1.mlp.c_proj.bias: (768,) (float32)
+transformer.h.1.mlp.c_proj.kernel: (768, 3072) (float32)
+transformer.h.10.attn.c_attn.bias: (2304,) (float32)
+transformer.h.10.attn.c_attn.kernel: (2304, 768) (float32)
+transformer.h.10.attn.c_proj.bias: (768,) (float32)
+transformer.h.10.attn.c_proj.kernel: (768, 768) (float32)
+transformer.h.10.ln_1.bias: (768,) (float32)
+transformer.h.10.ln_1.scale: (768,) (float32)
+transformer.h.10.ln_2.bias: (768,) (float32)
+transformer.h.10.ln_2.scale: (768,) (float32)
+transformer.h.10.mlp.c_fc.bias: (3072,) (float32)
+transformer.h.10.mlp.c_fc.kernel: (3072, 768) (float32)
+transformer.h.10.mlp.c_proj.bias: (768,) (float32)
+transformer.h.10.mlp.c_proj.kernel: (768, 3072) (float32)
+transformer.h.11.attn.c_attn.bias: (2304,) (float32)
+transformer.h.11.attn.c_attn.kernel: (2304, 768) (float32)
+transformer.h.11.attn.c_proj.bias: (768,) (float32)
+transformer.h.11.attn.c_proj.kernel: (768, 768) (float32)
+transformer.h.11.ln_1.bias: (768,) (float32)
+transformer.h.11.ln_1.scale: (768,) (float32)
+transformer.h.11.ln_2.bias: (768,) (float32)
+transformer.h.11.ln_2.scale: (768,) (float32)
+transformer.h.11.mlp.c_fc.bias: (3072,) (float32)
+transformer.h.11.mlp.c_fc.kernel: (3072, 768) (float32)
+transformer.h.11.mlp.c_proj.bias: (768,) (float32)
+transformer.h.11.mlp.c_proj.kernel: (768, 3072) (float32)
+transformer.h.2.attn.c_attn.bias: (2304,) (float32)
+transformer.h.2.attn.c_attn.kernel: (2304, 768) (float32)
+transformer.h.2.attn.c_proj.bias: (768,) (float32)
+transformer.h.2.attn.c_proj.kernel: (768, 768) (float32)
+transformer.h.2.ln_1.bias: (768,) (float32)
+transformer.h.2.ln_1.scale: (768,) (float32)
+transformer.h.2.ln_2.bias: (768,) (float32)
+transformer.h.2.ln_2.scale: (768,) (float32)
+transformer.h.2.mlp.c_fc.bias: (3072,) (float32)
+transformer.h.2.mlp.c_fc.kernel: (3072, 768) (float32)
+transformer.h.2.mlp.c_proj.bias: (768,) (float32)
+transformer.h.2.mlp.c_proj.kernel: (768, 3072) (float32)
+transformer.h.3.attn.c_attn.bias: (2304,) (float32)
+transformer.h.3.attn.c_attn.kernel: (2304, 768) (float32)
+transformer.h.3.attn.c_proj.bias: (768,) (float32)
+transformer.h.3.attn.c_proj.kernel: (768, 768) (float32)
+transformer.h.3.ln_1.bias: (768,) (float32)
+transformer.h.3.ln_1.scale: (768,) (float32)
+transformer.h.3.ln_2.bias: (768,) (float32)
+transformer.h.3.ln_2.scale: (768,) (float32)
+transformer.h.3.mlp.c_fc.bias: (3072,) (float32)
+transformer.h.3.mlp.c_fc.kernel: (3072, 768) (float32)
+transformer.h.3.mlp.c_proj.bias: (768,) (float32)
+transformer.h.3.mlp.c_proj.kernel: (768, 3072) (float32)
+transformer.h.4.attn.c_attn.bias: (2304,) (float32)
+transformer.h.4.attn.c_attn.kernel: (2304, 768) (float32)
+transformer.h.4.attn.c_proj.bias: (768,) (float32)
+transformer.h.4.attn.c_proj.kernel: (768, 768) (float32)
+transformer.h.4.ln_1.bias: (768,) (float32)
+transformer.h.4.ln_1.scale: (768,) (float32)
+transformer.h.4.ln_2.bias: (768,) (float32)
+transformer.h.4.ln_2.scale: (768,) (float32)
+transformer.h.4.mlp.c_fc.bias: (3072,) (float32)
+transformer.h.4.mlp.c_fc.kernel: (3072, 768) (float32)
+transformer.h.4.mlp.c_proj.bias: (768,) (float32)
+transformer.h.4.mlp.c_proj.kernel: (768, 3072) (float32)
+transformer.h.5.attn.c_attn.bias: (2304,) (float32)
+transformer.h.5.attn.c_attn.kernel: (2304, 768) (float32)
+transformer.h.5.attn.c_proj.bias: (768,) (float32)
+transformer.h.5.attn.c_proj.kernel: (768, 768) (float32)
+transformer.h.5.ln_1.bias: (768,) (float32)
+transformer.h.5.ln_1.scale: (768,) (float32)
+transformer.h.5.ln_2.bias: (768,) (float32)
+transformer.h.5.ln_2.scale: (768,) (float32)
+transformer.h.5.mlp.c_fc.bias: (3072,) (float32)
+transformer.h.5.mlp.c_fc.kernel: (3072, 768) (float32)
+transformer.h.5.mlp.c_proj.bias: (768,) (float32)
+transformer.h.5.mlp.c_proj.kernel: (768, 3072) (float32)
+transformer.h.6.attn.c_attn.bias: (2304,) (float32)
+transformer.h.6.attn.c_attn.kernel: (2304, 768) (float32)
+transformer.h.6.attn.c_proj.bias: (768,) (float32)
+transformer.h.6.attn.c_proj.kernel: (768, 768) (float32)
+transformer.h.6.ln_1.bias: (768,) (float32)
+transformer.h.6.ln_1.scale: (768,) (float32)
+transformer.h.6.ln_2.bias: (768,) (float32)
+transformer.h.6.ln_2.scale: (768,) (float32)
+transformer.h.6.mlp.c_fc.bias: (3072,) (float32)
+transformer.h.6.mlp.c_fc.kernel: (3072, 768) (float32)
+transformer.h.6.mlp.c_proj.bias: (768,) (float32)
+transformer.h.6.mlp.c_proj.kernel: (768, 3072) (float32)
+transformer.h.7.attn.c_attn.bias: (2304,) (float32)
+transformer.h.7.attn.c_attn.kernel: (2304, 768) (float32)
+transformer.h.7.attn.c_proj.bias: (768,) (float32)
+transformer.h.7.attn.c_proj.kernel: (768, 768) (float32)
+transformer.h.7.ln_1.bias: (768,) (float32)
+transformer.h.7.ln_1.scale: (768,) (float32)
+transformer.h.7.ln_2.bias: (768,) (float32)
+transformer.h.7.ln_2.scale: (768,) (float32)
+transformer.h.7.mlp.c_fc.bias: (3072,) (float32)
+transformer.h.7.mlp.c_fc.kernel: (3072, 768) (float32)
+transformer.h.7.mlp.c_proj.bias: (768,) (float32)
+transformer.h.7.mlp.c_proj.kernel: (768, 3072) (float32)
+transformer.h.8.attn.c_attn.bias: (2304,) (float32)
+transformer.h.8.attn.c_attn.kernel: (2304, 768) (float32)
+transformer.h.8.attn.c_proj.bias: (768,) (float32)
+transformer.h.8.attn.c_proj.kernel: (768, 768) (float32)
+transformer.h.8.ln_1.bias: (768,) (float32)
+transformer.h.8.ln_1.scale: (768,) (float32)
+transformer.h.8.ln_2.bias: (768,) (float32)
+transformer.h.8.ln_2.scale: (768,) (float32)
+transformer.h.8.mlp.c_fc.bias: (3072,) (float32)
+transformer.h.8.mlp.c_fc.kernel: (3072, 768) (float32)
+transformer.h.8.mlp.c_proj.bias: (768,) (float32)
+transformer.h.8.mlp.c_proj.kernel: (768, 3072) (float32)
+transformer.h.9.attn.c_attn.bias: (2304,) (float32)
+transformer.h.9.attn.c_attn.kernel: (2304, 768) (float32)
+transformer.h.9.attn.c_proj.bias: (768,) (float32)
+transformer.h.9.attn.c_proj.kernel: (768, 768) (float32)
+transformer.h.9.ln_1.bias: (768,) (float32)
+transformer.h.9.ln_1.scale: (768,) (float32)
+transformer.h.9.ln_2.bias: (768,) (float32)
+transformer.h.9.ln_2.scale: (768,) (float32)
+transformer.h.9.mlp.c_fc.bias: (3072,) (float32)
+transformer.h.9.mlp.c_fc.kernel: (3072, 768) (float32)
+transformer.h.9.mlp.c_proj.bias: (768,) (float32)
+transformer.h.9.mlp.c_proj.kernel: (768, 3072) (float32)
+transformer.ln_f.bias: (768,) (float32)
+transformer.ln_f.scale: (768,) (float32)
+transformer.wpe.embedding: (1024, 768) (float32)
+transformer.wte.embedding: (50257, 768) (float32)
+
+💾 Estimated memory usage: 474.70 MB
+
+🔢 Memory usage by dtype:
+  float32: 474.70 MB
+  float16: 237.35 MB
+  bfloat16: 237.35 MB
