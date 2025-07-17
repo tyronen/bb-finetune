@@ -1,12 +1,17 @@
 import time
+import types
+from collections import defaultdict
 
+import pandas as pd
 import torch
 import wandb
 from datasets import load_dataset
+from torch.utils.data import DataLoader
 from transformers import (
     AutoModelForSequenceClassification,
     GenerationConfig,
     AutoConfig,
+    DataCollatorWithPadding,
 )
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from trl import (
@@ -14,10 +19,18 @@ from trl import (
     PPOTrainer,
     create_reference_model,
 )
+from trl.models.utils import unwrap_model_for_generation
+from trl.trainer.utils import (
+    batch_generation,
+    truncate_response,
+    get_reward,
+    print_rich_table,
+)
 
 import utils
 
 scaling_factor = 200
+device = utils.get_device()
 
 
 def build_dataset(
@@ -80,7 +93,6 @@ def build_dataset(
     dataset["test"] = preprocess(dataset["test"].select(range(6553 // scaling_factor)))
     for split in ("train", "valid"):
         dataset[split] = dataset[split].remove_columns(["label"])
-
     return dataset
 
 
@@ -92,6 +104,107 @@ def print_number_of_trainable_model_parameters(model):
         if param.requires_grad:
             trainable_model_params += param.numel()
     return f"\ntrainable model parameters: {trainable_model_params}\nall model parameters: {all_model_params}\npercentage of trainable model parameters: {100 * trainable_model_params / all_model_params:.2f}%"
+
+
+def _noop_to(self, *args, **kwargs):
+    return self
+
+
+class GpuDataCollator(DataCollatorWithPadding):
+    def __init__(
+            self, tokenizer, device, padding=True, max_length=None, pad_to_multiple_of=None
+    ):
+        super().__init__(
+            tokenizer=tokenizer,
+            padding=padding,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+        )
+        self.device = device
+
+    def __call__(self, features):
+        batch = super().__call__(features)
+        return {k: v.to(self.device) for k, v in batch.items()}
+
+
+def patched_generate_completions(self, sampling: bool = False):
+    table = defaultdict(list)
+    gen_cfg = GenerationConfig(
+        max_new_tokens=self.args.response_length,
+        temperature=(0.01 + 1e-7),
+        top_k=0.0,
+        top_p=1.0,
+        do_sample=True,
+    )
+
+    with unwrap_model_for_generation(self.model, self.accelerator) as unwrapped_model:
+        for batch in self.eval_dataloader:
+            query = batch["input_ids"].to(self.model.device)
+            with torch.no_grad():
+                ctx_len = query.shape[1]
+                # this single call now handles the *whole* batch at once
+                torch.cuda.synchronize()
+                t0 = time.time()
+                query_resp, _ = batch_generation(
+                    unwrapped_model.policy,
+                    query,
+                    query.shape[0],
+                    self.processing_class.pad_token_id,
+                    gen_cfg,
+                )
+                torch.cuda.synchronize()
+                t1 = time.time()
+                print(f"batch generation took {t1 - t0:.3f}s")
+                t0 = time.time()
+                resp = query_resp[:, ctx_len:]
+                post = resp
+                if self.stop_token_id is not None:
+                    post = truncate_response(
+                        self.stop_token_id, self.processing_class.pad_token_id, resp
+                    )
+
+                # collect for display/logging
+                table["query"].extend(
+                    self.processing_class.batch_decode(query, skip_special_tokens=True)
+                )
+                table["model response"].extend(self.processing_class.batch_decode(post))
+                concat = torch.cat((query, post), dim=1)
+                torch.cuda.synchronize()
+                t1 = time.time()
+                print(f"midsection took {t1 - t0:.3f}s")
+                t0 = time.time()
+                _, score, _ = get_reward(
+                    self.reward_model,
+                    concat,
+                    self.processing_class.pad_token_id,
+                    ctx_len,
+                )
+                table["score"].extend(score.cpu().tolist())
+                torch.cuda.synchronize()
+                t1 = time.time()
+                print(f"get reward took {t1 - t0:.3f}s")
+
+            if sampling:
+                break
+
+    df = pd.DataFrame(table)
+    if self.accelerator.is_main_process:
+        if df.shape[0]:
+            print_rich_table(df.iloc[:5])
+        if "wandb" in self.args.report_to:
+            wandb.log({"completions": wandb.Table(dataframe=df)})
+
+
+def get_train_dataloader(ppo_trainer):
+    return DataLoader(
+        ppo_trainer.train_dataset,
+        batch_size=ppo_trainer.local_dataloader_batch_size,
+        shuffle=True,
+        collate_fn=DataCollatorWithPadding(ppo_trainer.processing_class),
+        drop_last=True,
+        num_workers=8,
+        pin_memory=True,
+    )
 
 
 def main():
@@ -155,10 +268,8 @@ def main():
     print("Value model created")
     learning_rate = 1.41e-5
     max_ppo_epochs = 1
-    mini_batch_size = 4
     batch_size = 16
 
-    device = utils.get_device()
     ref_model.to(device)
     rw_model.to(device)
     ppo_model.to(device)
@@ -167,9 +278,12 @@ def main():
     config = PPOConfig(
         learning_rate=learning_rate,
         num_ppo_epochs=max_ppo_epochs,
-        mini_batch_size=mini_batch_size,
-        batch_size=batch_size,
-        report_to="wandb",
+        num_mini_batches=4,
+        per_device_train_batch_size=batch_size,
+        gradient_accumulation_steps=2,
+        report_to=None,
+        dataloader_pin_memory=True,
+        dataloader_num_workers=8,
     )
 
     ppo_trainer = PPOTrainer(
@@ -182,13 +296,29 @@ def main():
         train_dataset=dataset["train"],
         eval_dataset=dataset["valid"],
     )
+    ppo_trainer.generate_completions = types.MethodType(
+        patched_generate_completions, ppo_trainer
+    )
+
+    ppo_trainer.dataloader = ppo_trainer.accelerator.prepare(
+        get_train_dataloader(ppo_trainer)
+    )
     print(
         f"GPU Memory: {torch.cuda.memory_allocated() / 1024 ** 3:.2f} GB / {torch.cuda.memory_reserved() / 1024 ** 3:.2f} GB"
     )
+    print("train dataset size:", len(ppo_trainer.train_dataset))
+    batches_per_epoch = len(get_train_dataloader(ppo_trainer))
+    if batches_per_epoch == 0:
+        print("Can't run; batch size is too small for the dataset")
+        wandb.finish(1)
+        return
+    print("batches per epoch:", batches_per_epoch)
     # this is from your PPOConfig:
     num_epochs = config.num_ppo_epochs  # e.g. 1
-    B = config.batch_size  # total samples collected per epoch
-    b = config.mini_batch_size  # samples per micro-batch
+    B = config.per_device_train_batch_size  # total samples collected per epoch
+    b = (
+            config.per_device_train_batch_size // config.num_mini_batches
+    )  # samples per micro-batch
     G = config.gradient_accumulation_steps  # defaults to 1 if absent
 
     # total samples (trajectories) seen in one full PPO run:
@@ -199,6 +329,8 @@ def main():
     #   then how many optimizer steps per epoch: (B/b) / G
     optimizer_steps = num_epochs * (B // b) // G
     # Use the built‑in training loop
+    print("torch sees GPUs:", torch.cuda.is_available(), torch.cuda.device_count())
+    print("accelerator.device:", ppo_trainer.accelerator.device)
     start = time.time()
     ppo_trainer.train()
     elapsed = max(1.0, time.time() - start)
