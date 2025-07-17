@@ -110,7 +110,7 @@ output_dir = "./qwen-sft-instruct-checkpoint"
 train_batch_size = 8  # reduced due to larger model size
 gradient_accumulation_steps = 4  # helps simulate batch size 16
 learning_rate = 1e-5
-eval_batch_size = 4
+eval_batch_size = 2
 eval_steps = 5
 max_input_length = 1024
 save_steps = 1000
@@ -145,7 +145,7 @@ model.train()
 
 
 train_data = load_dataset("OpenAssistant/oasst1", split="train")
-val_data = load_dataset("OpenAssistant/oasst1", split="validation[:50]")
+val_data = load_dataset("OpenAssistant/oasst1", split="validation[:40]")
 
 train_pairs = build_prompt_response_pairs(train_data)
 val_pairs = build_prompt_response_pairs(val_data)
