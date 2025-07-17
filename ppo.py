@@ -86,16 +86,8 @@ def print_number_of_trainable_model_parameters(model):
 
 
 def main():
-    device = utils.get_device()
-    model = AutoModelForCausalLM.from_pretrained(
-        utils.SFT_DIR,
-        torch_dtype=torch.bfloat16,
-        device_map="auto",
-        trust_remote_code=True,
-    )
     tokenizer = AutoTokenizer.from_pretrained(utils.BASE, trust_remote_code=True)
     tokenizer.pad_token = tokenizer.eos_token
-    model.config.pad_token_id = tokenizer.pad_token_id
     dataset = build_dataset(
         dataset_name="CarperAI/openai_summarize_tldr",
         tokenizer=tokenizer,
@@ -106,8 +98,10 @@ def main():
         utils.SFT_DIR,
         torch_dtype=torch.bfloat16,
         device_map="auto",
+        low_cpu_mem_usage=True,
         trust_remote_code=True,
     )
+    ppo_model.config.pad_token_id = tokenizer.pad_token_id
 
     print(
         f"PPO model parameters to be updated (ValueHead + 769 params):\n{print_number_of_trainable_model_parameters(ppo_model)}\n"
@@ -127,27 +121,32 @@ def main():
     rw_tokenizer = AutoTokenizer.from_pretrained(utils.REWARD_DIR)
     rw_model = AutoModelForSequenceClassification.from_pretrained(
         utils.REWARD_DIR,
+        device_map="auto",
+        torch_dtype=torch.bfloat16,
+        low_cpu_mem_usage=True,
         trust_remote_code=True,
         ignore_mismatched_sizes=True,
     )
-    rw_model.to(device)
     rw_model.config.return_dict = True
     print(rw_model.config.id2label)
-
-    mean, std = utils.evaluate_normalized_reward_score(
-        model, rw_model, rw_tokenizer, dataset["test"], tokenizer, num_samples=100
-    )
-    print(f"mean: {mean} std: {std}")
+    #
+    # mean, std = utils.evaluate_normalized_reward_score(
+    #     model, rw_model, rw_tokenizer, dataset["test"], tokenizer, num_samples=100
+    # )
+    # print(f"mean: {mean} std: {std}")
     value_model = AutoModelForSequenceClassification.from_pretrained(
         utils.SFT_DIR,
+        device_map="auto",
+        torch_dtype=torch.bfloat16,
+        low_cpu_mem_usage=True,
         trust_remote_code=True,
         num_labels=1,
     )
     value_model.config.return_dict = True
     learning_rate = 1.41e-5
     max_ppo_epochs = 1
-    mini_batch_size = 4
-    batch_size = 8
+    mini_batch_size = 1
+    batch_size = 1
 
     config = PPOConfig(
         learning_rate=learning_rate,
@@ -166,12 +165,15 @@ def main():
         train_dataset=dataset["train"],
         eval_dataset=dataset["valid"],
     )
+    print(
+        f"GPU Memory: {torch.cuda.memory_allocated() / 1024 ** 3:.2f} GB / {torch.cuda.memory_reserved() / 1024 ** 3:.2f} GB"
+    )
 
     # Use the built‑in training loop
     ppo_trainer.train()
     ppo_trainer.save_model(utils.PPO_DIR)
     ppo_trainer.generate_completions()
-    utils.evaluate_normalized_reward_score(
+    mean, std = utils.evaluate_normalized_reward_score(
         ppo_model, rw_model, rw_tokenizer, dataset["test"], tokenizer, num_samples=20
     )
     print(f"mean: {mean} std: {std}")
