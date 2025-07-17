@@ -14,6 +14,7 @@ dependencies = [
   "tqdm",
   "python-dotenv",
   "ipykernel",
+  "nvidia-ml-py3",
 
   # plotting & viz
   "matplotlib>=3.10.3",
