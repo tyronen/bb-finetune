@@ -1,11 +1,9 @@
 import time
-import types
-from collections import defaultdict
 
-import pandas as pd
 import torch
 import wandb
 from datasets import load_dataset
+from peft import LoraConfig, get_peft_model
 from torch.utils.data import DataLoader
 from transformers import (
     AutoModelForSequenceClassification,
@@ -18,13 +16,6 @@ from trl import (
     PPOConfig,
     PPOTrainer,
     create_reference_model,
-)
-from trl.models.utils import unwrap_model_for_generation
-from trl.trainer.utils import (
-    batch_generation,
-    truncate_response,
-    get_reward,
-    print_rich_table,
 )
 
 import utils
@@ -106,95 +97,6 @@ def print_number_of_trainable_model_parameters(model):
     return f"\ntrainable model parameters: {trainable_model_params}\nall model parameters: {all_model_params}\npercentage of trainable model parameters: {100 * trainable_model_params / all_model_params:.2f}%"
 
 
-def _noop_to(self, *args, **kwargs):
-    return self
-
-
-class GpuDataCollator(DataCollatorWithPadding):
-    def __init__(
-            self, tokenizer, device, padding=True, max_length=None, pad_to_multiple_of=None
-    ):
-        super().__init__(
-            tokenizer=tokenizer,
-            padding=padding,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-        )
-        self.device = device
-
-    def __call__(self, features):
-        batch = super().__call__(features)
-        return {k: v.to(self.device) for k, v in batch.items()}
-
-
-def patched_generate_completions(self, sampling: bool = False):
-    table = defaultdict(list)
-    gen_cfg = GenerationConfig(
-        max_new_tokens=self.args.response_length,
-        temperature=(0.01 + 1e-7),
-        top_k=0.0,
-        top_p=1.0,
-        do_sample=True,
-    )
-
-    with unwrap_model_for_generation(self.model, self.accelerator) as unwrapped_model:
-        for batch in self.eval_dataloader:
-            query = batch["input_ids"].to(self.model.device)
-            with torch.no_grad():
-                ctx_len = query.shape[1]
-                # this single call now handles the *whole* batch at once
-                torch.cuda.synchronize()
-                t0 = time.time()
-                query_resp, _ = batch_generation(
-                    unwrapped_model.policy,
-                    query,
-                    query.shape[0],
-                    self.processing_class.pad_token_id,
-                    gen_cfg,
-                )
-                torch.cuda.synchronize()
-                t1 = time.time()
-                print(f"batch generation took {t1 - t0:.3f}s")
-                t0 = time.time()
-                resp = query_resp[:, ctx_len:]
-                post = resp
-                if self.stop_token_id is not None:
-                    post = truncate_response(
-                        self.stop_token_id, self.processing_class.pad_token_id, resp
-                    )
-
-                # collect for display/logging
-                table["query"].extend(
-                    self.processing_class.batch_decode(query, skip_special_tokens=True)
-                )
-                table["model response"].extend(self.processing_class.batch_decode(post))
-                concat = torch.cat((query, post), dim=1)
-                torch.cuda.synchronize()
-                t1 = time.time()
-                print(f"midsection took {t1 - t0:.3f}s")
-                t0 = time.time()
-                _, score, _ = get_reward(
-                    self.reward_model,
-                    concat,
-                    self.processing_class.pad_token_id,
-                    ctx_len,
-                )
-                table["score"].extend(score.cpu().tolist())
-                torch.cuda.synchronize()
-                t1 = time.time()
-                print(f"get reward took {t1 - t0:.3f}s")
-
-            if sampling:
-                break
-
-    df = pd.DataFrame(table)
-    if self.accelerator.is_main_process:
-        if df.shape[0]:
-            print_rich_table(df.iloc[:5])
-        if "wandb" in self.args.report_to:
-            wandb.log({"completions": wandb.Table(dataframe=df)})
-
-
 def get_train_dataloader(ppo_trainer):
     return DataLoader(
         ppo_trainer.train_dataset,
@@ -223,6 +125,16 @@ def main():
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
     )
+    lora_cfg = LoraConfig(
+        r=8,  # rank of LoRA matrices
+        lora_alpha=32,
+        lora_dropout=0.05,
+        bias="none",
+        task_type="CAUSAL_LM",
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],  # Qwen uses these
+    )
+
+    ppo_model = get_peft_model(ppo_model, lora_cfg)
     ppo_model.config.pad_token_id = tokenizer.pad_token_id
 
     print(
@@ -265,6 +177,7 @@ def main():
         num_labels=1,
     )
     value_model.config.return_dict = True
+
     print("Value model created")
     learning_rate = 1.41e-5
     max_ppo_epochs = 1
@@ -295,9 +208,6 @@ def main():
         value_model=value_model,
         train_dataset=dataset["train"],
         eval_dataset=dataset["valid"],
-    )
-    ppo_trainer.generate_completions = types.MethodType(
-        patched_generate_completions, ppo_trainer
     )
 
     ppo_trainer.dataloader = ppo_trainer.accelerator.prepare(
