@@ -1,22 +1,20 @@
 import torch
 from datasets import load_dataset
 from transformers import (
-    AutoModelForCausalLM,
     AutoModelForSequenceClassification,
 )
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from trl import (
-    AutoModelForCausalLMWithValueHead,
-    create_reference_model,
     PPOConfig,
     PPOTrainer,
+    create_reference_model,
 )
 
 import utils
 
 
 def build_dataset(
-        model_name, dataset_name, tokenizer, input_min_text_length, input_max_text_length
+        dataset_name, tokenizer, input_min_text_length, input_max_text_length
 ):
     """
     Preprocess the dataset and return train/valid/test splits with input_ids.
@@ -50,6 +48,7 @@ def build_dataset(
                 "query": tokenizer.decode(
                     inputs["input_ids"], skip_special_tokens=True
                 ),
+                "label": sample["label"],
             }
 
         split = split.map(tokenize, batched=False)
@@ -57,17 +56,21 @@ def build_dataset(
             [
                 col
                 for col in split.column_names
-                if col not in ("input_ids", "attention_mask", "query")
+                if col not in ("input_ids", "attention_mask", "query", "label")
             ]
         )
-
-        # Convert just the tensor fields
-        split.set_format(type="torch", columns=["input_ids", "attention_mask"])
         return split
 
     dataset["train"] = preprocess(dataset["train"].select(range(1200)))
     dataset["valid"] = preprocess(dataset["valid"].select(range(60)))
     dataset["test"] = preprocess(dataset["test"].select(range(60)))
+    # Convert just the tensor fields
+    for split in ("train", "valid"):
+        dataset[split] = dataset[split].remove_columns(["query", "label"])
+        dataset[split].set_format(
+            type="torch",
+            columns=["input_ids", "attention_mask"],
+        )
 
     return dataset
 
@@ -94,27 +97,29 @@ def main():
     tokenizer.pad_token = tokenizer.eos_token
     model.config.pad_token_id = tokenizer.pad_token_id
     dataset = build_dataset(
-        model_name=utils.BASE,
         dataset_name="CarperAI/openai_summarize_tldr",
         tokenizer=tokenizer,
         input_min_text_length=200,
         input_max_text_length=1000,
     )
-    ppo_model = AutoModelForCausalLMWithValueHead.from_pretrained(
+    ppo_model = AutoModelForCausalLM.from_pretrained(
         utils.SFT_DIR,
         torch_dtype=torch.bfloat16,
         device_map="auto",
         trust_remote_code=True,
-        is_trainable=True,
     )
-    ppo_model.generation_config = ppo_model.pretrained_model.generation_config
 
     print(
         f"PPO model parameters to be updated (ValueHead + 769 params):\n{print_number_of_trainable_model_parameters(ppo_model)}\n"
     )
-    print(ppo_model.v_head)
+
+    # after loading ppo_model but **before** create_reference_model(...)
+    ppo_model.config.use_cache = False  # PPO doesn’t need past-key-values
+    ppo_model.config.return_dict = True  # make forward return a ModelOutput
 
     ref_model = create_reference_model(ppo_model)
+    ref_model.config.use_cache = False
+    ref_model.config.return_dict = True
     print(
         f"Reference model parameters to be updated:\n{print_number_of_trainable_model_parameters(ref_model)}\n"
     )
@@ -126,6 +131,7 @@ def main():
         ignore_mismatched_sizes=True,
     )
     rw_model.to(device)
+    rw_model.config.return_dict = True
     print(rw_model.config.id2label)
 
     mean, std = utils.evaluate_normalized_reward_score(
@@ -137,10 +143,11 @@ def main():
         trust_remote_code=True,
         num_labels=1,
     )
+    value_model.config.return_dict = True
     learning_rate = 1.41e-5
     max_ppo_epochs = 1
     mini_batch_size = 4
-    batch_size = 16
+    batch_size = 8
 
     config = PPOConfig(
         learning_rate=learning_rate,

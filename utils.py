@@ -57,7 +57,7 @@ def evaluate_normalized_reward_score(
         input_text = sample["query"]
         reference_summary = sample["label"]
 
-        input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to("cuda")
+        input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(device)
 
         generation_config = GenerationConfig(
             max_new_tokens=max_new_tokens,
