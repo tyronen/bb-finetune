@@ -62,7 +62,6 @@ def set_seed(seed_val=42):
 
 
 bertscore = evaluate.load("bertscore")
-bleu = evaluate.load("bleu")
 
 def compute_metrics(eval_preds):
     label_ids = eval_preds.label_ids
@@ -70,13 +69,11 @@ def compute_metrics(eval_preds):
     pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
     label_str = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
     bertscore_result = bertscore.compute(predictions=pred_str, references=label_str, lang="en")
-    bleu_result = bleu.compute(predictions=pred_str, references=[[x] for x in label_str])
     # BERTScore returns dict with precision, recall, f1 lists; take means for reporting
     return {
         "bertscore_precision": sum(bertscore_result['precision']) / len(bertscore_result['precision']),
         "bertscore_recall": sum(bertscore_result['recall']) / len(bertscore_result['recall']),
         "bertscore_f1": sum(bertscore_result['f1']) / len(bertscore_result['f1']),
-        "bleu": bleu_result["bleu"],
     }
 
 def print_sample_generations(model, tokenizer, n=5):
@@ -97,11 +94,11 @@ def print_sample_generations(model, tokenizer, n=5):
 # Hyperparameters and output settings
 device = "cuda" if torch.cuda.is_available() else "cpu"
 output_dir = "./qwen-sft-instruct-checkpoint"
-train_batch_size = 4  # reduced due to larger model size
+train_batch_size = 8  # reduced due to larger model size
 gradient_accumulation_steps = 4  # helps simulate batch size 16
 learning_rate = 1e-5
-eval_batch_size = 1
-eval_steps = 10
+eval_batch_size = 2
+eval_steps = 20
 max_input_length = 1024
 save_steps = 1000
 num_train_epochs = 1
@@ -135,7 +132,7 @@ model.train()
 
 
 train_data = load_dataset("OpenAssistant/oasst1", split="train")
-val_data = load_dataset("OpenAssistant/oasst1", split="validation[:100]")
+val_data = load_dataset("OpenAssistant/oasst1", split="validation[:20]")
 
 train_pairs = build_prompt_response_pairs(train_data)
 val_pairs = build_prompt_response_pairs(val_data)
