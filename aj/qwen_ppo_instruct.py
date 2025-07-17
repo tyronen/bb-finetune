@@ -18,28 +18,10 @@ from trl import (
 from trl.trainer.utils import SIMPLE_CHAT_TEMPLATE
 
 
-class RewardModelWrapper(nn.Module):
-    def __init__(self, reward_model, reward_tokenizer):
-        super().__init__()
-        self.reward_model = reward_model
-        self.reward_tokenizer = reward_tokenizer
-
-    def forward(self, texts, **kwargs):
-        # texts: list of strings (the generated outputs)
-        # Returns: tensor of rewards
-        inputs = self.reward_tokenizer(
-            texts, padding=True, truncation=True, return_tensors="pt"
-        ).to(self.reward_model.device)
-        with torch.no_grad():
-            outputs = self.reward_model(**inputs)
-            # OpenAssistant/DeBERTa models: take scalar reward (logits or scores)
-            rewards = outputs.logits.squeeze(-1)
-        return rewards
-
 # ========= USER CONFIG ===========
 
 sft_model_path = "./qwen-sft-instruct-checkpoint/merged"
-reward_model_path = "OpenAssistant/reward-model-deberta-v3-large-v2"
+reward_model_path = "Skywork/Skywork-Reward-V2-Qwen3-0.6B"
 output_dir = "./qwen-ppo-rlhf-checkpoint"
 dataset_name = "OpenAssistant/oasst1"
 dataset_split = "validation"
@@ -47,7 +29,7 @@ prompt_column = "text"
 eval_samples = 100  # number of eval prompts from the end
 
 # PPO/Trainer params
-per_device_train_batch_size = 4
+per_device_train_batch_size = 2
 gradient_accumulation_steps = 2
 learning_rate = 3e-6
 num_ppo_epochs = 1
@@ -110,20 +92,13 @@ if peft_config is None:
     ref_policy = AutoModelForCausalLM.from_pretrained(sft_model_path, trust_remote_code=True)
 
 # Reward/Value models (deberta)
-reward_model_raw = AutoModelForSequenceClassification.from_pretrained(
+reward_model = AutoModelForSequenceClassification.from_pretrained(
     reward_model_path, trust_remote_code=True, num_labels=1
 )
 
 value_model = AutoModelForSequenceClassification.from_pretrained(
     reward_model_path, trust_remote_code=True, num_labels=1
 )
-
-reward_tokenizer = AutoTokenizer.from_pretrained(
-    reward_model_path,
-    use_fast=True  # Fast tokenizer is usually more robust for reward models
-)
-
-reward_model = RewardModelWrapper(reward_model_raw, reward_tokenizer)
 
 # ========== DATA LOADING ==========
 
