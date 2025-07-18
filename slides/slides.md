@@ -100,6 +100,12 @@ transition: slide-left
 
 # How It Ended
 
+<img src="./images/SFT-PPO-Model-Comp.png" alt="PPO" width="1024" />
+
+---
+transition: slide-left
+---
+
 <img src="./images/Pain.jpeg" alt="Pain" width="540" />
 
 ---
