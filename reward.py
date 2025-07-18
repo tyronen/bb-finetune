@@ -1,3 +1,4 @@
+import argparse
 import os
 import shutil
 import time
@@ -21,7 +22,23 @@ from transformers.modeling_outputs import SequenceClassifierOutput
 
 import utils
 
-scaling_factor = 100
+scaling_factor = 40
+
+config = {
+    "learning_rate": 5e-4,
+    "lr_scheduler_type": "constant_with_warmup",
+    "warmup_steps": 500,
+}
+
+sweep_config = {
+    "method": "grid",  # or "random"
+    "metric": {"name": "eval/accuracy", "goal": "maximize"},
+    "parameters": {
+        "learning_rate": {"values": [1e-4, 2e-4, 5e-4]},
+        "warmup_steps": {"values": [200, 400, 600]},
+        "lr_scheduler_type": {"values": ["constant_with_warmup"]},
+    },
+}
 
 
 def create_comparison_dataset(path, split):
@@ -148,7 +165,7 @@ class DataCollatorReward:
         batch["attention_mask"] = torch.stack(
             [f[1] for f in data] + [f[3] for f in data]
         )
-        batch["labels"] = torch.tensor([0] * len(data) + [1] * len(data))
+        batch["labels"] = torch.tensor([1] * len(data) + [0] * len(data))
         return batch
 
 
@@ -193,10 +210,12 @@ def cache_pairwise_dataset(tokenizer, cache_path, split):
     return dataset
 
 
-def main():
+def run():
+    global config
     device = utils.get_device()
-    wandb.init(entity="mlx-institute", project="reward")
-
+    wandb.init(entity="mlx-institute", project="reward", config=config)
+    hyperparameters = dict(wandb.config)
+    wandb.run.name = f"lr={hyperparameters['learning_rate']},warmup={hyperparameters['warmup_steps']}"
     tokenizer = AutoTokenizer.from_pretrained(utils.SFT_DIR)
     tokenizer.pad_token = tokenizer.eos_token
 
@@ -214,7 +233,6 @@ def main():
     )
     eval_steps = steps_per_epoch // 8
     logging_steps = eval_steps // 2
-    warmup_steps = min(500, 2 * eval_steps)
     training_args = TrainingArguments(
         bf16=True,
         dataloader_pin_memory=True,
@@ -222,9 +240,8 @@ def main():
         eval_steps=eval_steps,
         eval_strategy="steps",
         gradient_accumulation_steps=gradient_accumulation_steps,
-        learning_rate=1e-4,
-        lr_scheduler_kwargs={"min_lr": 5e-6},
-        lr_scheduler_type="cosine_with_min_lr",
+        learning_rate=hyperparameters["learning_rate"],
+        lr_scheduler_type=hyperparameters["lr_scheduler_type"],
         logging_steps=logging_steps,
         max_grad_norm=1.0,
         max_steps=steps_per_epoch,
@@ -236,7 +253,7 @@ def main():
         report_to="wandb",
         save_steps=0,
         save_strategy="no",
-        warmup_steps=warmup_steps,
+        warmup_steps=hyperparameters["warmup_steps"],
         weight_decay=0.01,
     )
 
@@ -263,7 +280,7 @@ def main():
         tokenizer, "train_pairwise_dataset.pt", "train"
     )
     val_dataset = cache_pairwise_dataset(tokenizer, "val_pairwise_dataset.pt", "test")
-    val_dataset = Subset(val_dataset, range(3000 // scaling_factor))
+    val_dataset = Subset(val_dataset, range(4000 // scaling_factor))
     # Create the collator to gather batches of pairwise comparisons
     data_collator = DataCollatorReward()
 
@@ -297,4 +314,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--sweep", action="store_true")
+    args = parser.parse_args()
+
+    if args.sweep:
+        sweep_id = wandb.sweep(sweep_config, project="reward", entity="mlx-institute")
+        wandb.agent(sweep_id, function=run)
+    else:
+        run()
