@@ -66,7 +66,7 @@ transition: fade-out
 
 # How It Ended
 
-<img src="./images/" alt="UI Screenshot" width="540" />
+<img src="./images/Pain.jpeg" alt="Pain" width="540" />
 
 ---
 
