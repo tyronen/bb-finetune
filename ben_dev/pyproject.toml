@@ -15,6 +15,7 @@ dependencies = [
   "python-dotenv",
   "ipykernel",
   "nvidia-ml-py3",
+  "python-dotenv",
 
   # plotting & viz
   "matplotlib>=3.10.3",
