@@ -1,7 +1,3 @@
-import shutil
-import os
-import torch
-import torch.nn as nn
 from accelerate import PartialState
 from datasets import load_dataset
 from peft import PeftModel
@@ -72,7 +68,7 @@ ppo_args = PPOConfig(
     eval_steps=1000,           # e.g. every 500 training steps
     save_strategy="steps",   # or "epoch" if you want to save every epoch
     save_steps=250,          # save every 250 steps, adjust as desired
-    save_total_limit=3,      # keep last 3 checkpoints (optional)
+    save_total_limit=2,      # keep last 3 checkpoints (optional)
 )
 
 # ========== MODEL AND TOKENIZER LOADING =========
