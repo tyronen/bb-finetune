@@ -40,13 +40,13 @@ transition: fade-out
 
 ---
 
-# ChatGPT + PPO = How It Started...
+# ChatGPT + PPO: How It Started...
 
 <img src="./images/MangaCreepy.png" alt="Creepy Manga" width="540" />
 
 ---
 
-# After 2 Hours of Debugging,,,
+# After 2 Hours of Debugging...
 
 <img src="./images/SeriousGakuto.png" alt="Serious Face" width="540" />
 
