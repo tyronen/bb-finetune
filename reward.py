@@ -22,12 +22,12 @@ from transformers.modeling_outputs import SequenceClassifierOutput
 
 import utils
 
-scaling_factor = 40
+scaling_factor = 20
 
 config = {
-    "learning_rate": 5e-4,
+    "learning_rate": 2e-4,
     "lr_scheduler_type": "constant_with_warmup",
-    "warmup_steps": 500,
+    "warmup_steps": 200,
 }
 
 sweep_config = {

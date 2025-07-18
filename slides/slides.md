@@ -23,7 +23,7 @@ mdc: true
 Arjuna James, Tyrone Nicholas, Ben Williams
 
 ---
-transition: slide-right
+transition: slide-left
 ---
 
 # Animated Bullet Points
@@ -39,7 +39,31 @@ transition: slide-right
 </ul>
 
 ---
-transition: slide-right
+transition: slide-left
+---
+
+# Time Spent This Week
+
+```mermaid
+pie 
+  "Coding models": 50
+  "Waiting for training": 10
+  "OOMs": 10
+  "Building C++ code": 10
+  "Debugging TRL": 20
+```
+
+---
+transition: slide-left
+---
+
+# Money Spent This Week
+
+
+<img src="./images/RunPod billing.png" alt="RunPod expenses" width="540" />
+
+---
+transition: slide-left
 ---
 
 # ChatGPT + PPO: How It Started...
@@ -47,7 +71,7 @@ transition: slide-right
 <img src="./images/MangaCreepy.png" alt="Creepy Manga" width="540" />
 
 ---
-transition: slide-right
+transition: slide-left
 ---
 
 # After 2 Hours of Debugging...
@@ -55,7 +79,7 @@ transition: slide-right
 <img src="./images/SeriousGakuto.png" alt="Serious Face" width="540" />
 
 ---
-transition: slide-right
+transition: slide-left
 ---
 
 # After 4 Hours of Debugging...
@@ -63,7 +87,7 @@ transition: slide-right
 <img src="./images/Gun.gif" alt="Suicide GIF" width="540" />
 
 ---
-transition: slide-right
+transition: slide-left
 ---
 
 # After 6 Hours of Debugging...
@@ -71,7 +95,7 @@ transition: slide-right
 <img src="./images/Angry.gif" alt="Angry GIF" width="540" />
 
 ---
-transition: slide-right
+transition: slide-left
 ---
 
 # How It Ended
@@ -79,7 +103,7 @@ transition: slide-right
 <img src="./images/Pain.jpeg" alt="Pain" width="540" />
 
 ---
-transition: slide-right
+transition: slide-left
 ---
 
 <h1 style="font-size:2rem;">
