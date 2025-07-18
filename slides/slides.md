@@ -23,7 +23,7 @@ mdc: true
 Arjuna James, Tyrone Nicholas, Ben Williams
 
 ---
-transition: fade-out
+transition: slide-right
 ---
 
 # Animated Bullet Points
@@ -39,11 +39,15 @@ transition: fade-out
 </ul>
 
 ---
+transition: slide-right
+---
 
 # ChatGPT + PPO: How It Started...
 
 <img src="./images/MangaCreepy.png" alt="Creepy Manga" width="540" />
 
+---
+transition: slide-right
 ---
 
 # After 2 Hours of Debugging...
@@ -51,11 +55,15 @@ transition: fade-out
 <img src="./images/SeriousGakuto.png" alt="Serious Face" width="540" />
 
 ---
+transition: slide-right
+---
 
 # After 4 Hours of Debugging...
 
 <img src="./images/Gun.gif" alt="Suicide GIF" width="540" />
 
+---
+transition: slide-right
 ---
 
 # After 6 Hours of Debugging...
@@ -63,11 +71,15 @@ transition: fade-out
 <img src="./images/Angry.gif" alt="Angry GIF" width="540" />
 
 ---
+transition: slide-right
+---
 
 # How It Ended
 
 <img src="./images/Pain.jpeg" alt="Pain" width="540" />
 
+---
+transition: slide-right
 ---
 
 <div style="text-align:center;">
