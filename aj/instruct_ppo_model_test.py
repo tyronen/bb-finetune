@@ -5,7 +5,7 @@ import os
 
 # ---- SETTINGS ----
 sft_dir = "./qwen-sft-instruct-checkpoint/merged"
-ppo_dir = "./qwen-ppo-rlhf-checkpoint/"
+ppo_dir = "./qwen-ppo-rlhf-checkpoint/merged"
 device = "cuda" if torch.cuda.is_available() else "cpu"
 max_new_tokens = 128
 
