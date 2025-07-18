@@ -24,7 +24,7 @@ sft_model_path = "./qwen-sft-instruct-checkpoint/merged"
 reward_model_path = "Skywork/Skywork-Reward-V2-Qwen3-0.6B"
 output_dir = "./qwen-ppo-rlhf-checkpoint"
 dataset_name = "OpenAssistant/oasst1"
-dataset_split = "validation"
+dataset_split = "train"
 prompt_column = "text"
 eval_samples = 100  # number of eval prompts from the end
 
@@ -47,7 +47,6 @@ model_args = ModelConfig(
 # -- PPOConfig --
 ppo_args = PPOConfig(
     output_dir=output_dir,
-    resume_from_checkpoint="/qwen-ppo-rlhf-checkpoint/checkpoint-1000",
     per_device_train_batch_size=per_device_train_batch_size,
     gradient_accumulation_steps=gradient_accumulation_steps,
     learning_rate=learning_rate,
