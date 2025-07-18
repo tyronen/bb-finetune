@@ -22,21 +22,6 @@ mdc: true
 
 Arjuna James, Tyrone Nicholas, Ben Williams
 
----
-transition: slide-left
----
-
-# Animated Bullet Points
-
-<ul>
-<v-click><li></li></v-click>
-<v-click><li></li></v-click>
-<v-click><li></li></v-click>
-<v-click><li></li></v-click>
-<v-click><li></li></v-click>
-<v-click><li></li></v-click>
-<v-click><li></li></v-click>
-</ul>
 
 ---
 transition: slide-left
@@ -61,6 +46,29 @@ transition: slide-left
 
 
 <img src="./images/RunPod billing.png" alt="RunPod expenses" width="540" />
+
+---
+transition: slide-left
+---
+
+# Things I Learned This Week
+
+<ul>
+<v-click><li>There's a another room at the bottom of the fire escape</li></v-click>
+<v-click><li>TRL kind of sucks</li></v-click>
+<v-click><li>Prompts matter</li></v-click>
+<v-click><li>Warmup and learning rate are decisive</li></v-click>
+<v-click><li>Use less data</li></v-click>
+</ul>
+
+
+---
+transition: slide-left
+---
+
+# Demo
+
+https://ujt5b5x9f0hsw6-7860.proxy.runpod.net/
 
 ---
 transition: slide-left

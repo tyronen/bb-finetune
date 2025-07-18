@@ -21,8 +21,8 @@ st.set_page_config(
 )
 
 SFT_DIR = utils.SFT_DIR
-REWARD_DIR = "data/smallreward"
-PPO_DIR = "data/oldppo"
+REWARD_DIR = utils.REWARD_DIR
+PPO_DIR = utils.PPO_DIR
 
 
 @st.cache_resource

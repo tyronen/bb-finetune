@@ -20,7 +20,7 @@ from trl import (
 
 import utils
 
-scaling_factor = 200
+scaling_factor = 100
 device = utils.get_device()
 
 
@@ -51,7 +51,11 @@ def build_dataset(
         )
 
         def tokenize(sample):
-            prompt = f"{sample['prompt']}\n\n"
+            prompt = (
+                "### TASK: Write a TL;DR summary for this Reddit post:\n\n"
+                f"{sample['prompt'].split('POST:')[-1].strip()}\n\n"
+                "TL;DR:"
+            )
             inputs = tokenizer(prompt, truncation=True, max_length=1024)
             return {
                 "input_ids": inputs["input_ids"],
@@ -179,7 +183,7 @@ def main():
     value_model.config.return_dict = True
 
     print("Value model created")
-    learning_rate = 1.41e-5
+    learning_rate = 4e-5
     max_ppo_epochs = 1
     batch_size = 16
 
@@ -190,6 +194,7 @@ def main():
 
     config = PPOConfig(
         learning_rate=learning_rate,
+        lr_scheduler_type="constant_with_warmup",
         num_ppo_epochs=max_ppo_epochs,
         num_mini_batches=4,
         per_device_train_batch_size=batch_size,
@@ -197,6 +202,7 @@ def main():
         report_to=None,
         dataloader_pin_memory=True,
         dataloader_num_workers=8,
+        warmup_ratio=0.1,
     )
 
     ppo_trainer = PPOTrainer(
