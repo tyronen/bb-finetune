@@ -42,4 +42,4 @@ transition: fade-out
 
 [🇨🇳 Qwen Assistant](http://65.109.84.92:7000/)
 
-<img width="568" height="496" alt="UI" src="https://github.com/user-attachments/assets/b79523fe-f5ca-47f4-9edf-96bf37b7ac2b" />
+![UI Screenshot](https://raw.githubusercontent.com/yourname/repo/branch/path/to/image.png)
