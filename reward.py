@@ -32,10 +32,11 @@ def create_comparison_dataset(path, split):
             continue
         if len(sample["chosen"].split()) < 5 or len(sample["rejected"].split()) < 5:
             continue
+        prompt = sample["prompt"].split("POST:")[-1].strip()
         pairs.append(
             {
-                "chosen": sample["prompt"] + "\n" + sample["chosen"],
-                "rejected": sample["prompt"] + "\n" + sample["rejected"],
+                "chosen": prompt + "\n" + sample["chosen"],
+                "rejected": prompt + "\n" + sample["rejected"],
             }
         )
     return pairs
@@ -213,6 +214,7 @@ def main():
     )
     eval_steps = steps_per_epoch // 8
     logging_steps = eval_steps // 2
+    warmup_steps = min(500, 2 * eval_steps)
     training_args = TrainingArguments(
         bf16=True,
         dataloader_pin_memory=True,
@@ -220,8 +222,8 @@ def main():
         eval_steps=eval_steps,
         eval_strategy="steps",
         gradient_accumulation_steps=gradient_accumulation_steps,
-        learning_rate=2e-4,
-        lr_scheduler_kwargs={"min_lr": 1e-6},
+        learning_rate=1e-4,
+        lr_scheduler_kwargs={"min_lr": 5e-6},
         lr_scheduler_type="cosine_with_min_lr",
         logging_steps=logging_steps,
         max_grad_norm=1.0,
@@ -234,7 +236,7 @@ def main():
         report_to="wandb",
         save_steps=0,
         save_strategy="no",
-        warmup_steps=500,
+        warmup_steps=warmup_steps,
         weight_decay=0.01,
     )
 
@@ -261,7 +263,7 @@ def main():
         tokenizer, "train_pairwise_dataset.pt", "train"
     )
     val_dataset = cache_pairwise_dataset(tokenizer, "val_pairwise_dataset.pt", "test")
-    val_dataset = Subset(val_dataset, range(2000 // scaling_factor))
+    val_dataset = Subset(val_dataset, range(3000 // scaling_factor))
     # Create the collator to gather batches of pairwise comparisons
     data_collator = DataCollatorReward()
 

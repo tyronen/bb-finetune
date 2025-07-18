@@ -20,7 +20,7 @@ st.set_page_config(
     page_title="Reddit Summary Model Comparison", page_icon="🤖", layout="wide"
 )
 
-SFT_DIR = "data/oldsft"
+SFT_DIR = utils.SFT_DIR
 REWARD_DIR = "data/smallreward"
 PPO_DIR = "data/oldppo"
 
@@ -101,7 +101,11 @@ class SummaryGenerator:
 
     def generate_sft_summary(self, post_text: str) -> str:
         """Generate summary using SFT model"""
-        prompt = f"Summarize the following Reddit post:\n\n{post_text}\n\nSummary:"
+        prompt = (
+            f"### TASK: Write a TL;DR summary for this Reddit post:\n\n"
+            f"{post_text}\n\n"
+            f"TL;DR:"
+        )
 
         inputs = self.models["sft_tokenizer"](
             prompt, return_tensors="pt", max_length=1024, truncation=True
@@ -123,8 +127,11 @@ class SummaryGenerator:
 
     def generate_ppo_summary(self, post_text: str) -> str:
         """Generate summary using PPO model"""
-        prompt = f"Summarize the following Reddit post:\n\n{post_text}\n\nSummary:"
-
+        prompt = (
+            f"### TASK: Write a TL;DR summary for this Reddit post:\n\n"
+            f"{post_text}\n\n"
+            f"TL;DR:"
+        )
         inputs = self.models["ppo_tokenizer"](
             prompt, return_tensors="pt", max_length=1024, truncation=True
         ).to(self.models["device"])

@@ -13,7 +13,7 @@ from trl import SFTConfig, SFTTrainer
 
 import utils
 
-scaling_factor = 40
+scaling_factor = 20
 
 
 class CustomTrainer(SFTTrainer):
@@ -50,6 +50,7 @@ def main():
     model.to(device)
     model.resize_token_embeddings(len(tokenizer))  # adjust token count
     model.config.pad_token_id = tokenizer.eos_token_id
+    model.config.use_cache = False
 
     per_device_train_batch_size = 4
     gradient_accumulation_steps = 2
@@ -80,11 +81,10 @@ def main():
         logging_steps=logging_steps,
         lr_scheduler_type="constant_with_warmup",
         max_steps=steps_per_epoch,
-        max_length=utils.max_input_length,
         optim="adamw_torch_fused",  # fused optimiser
         output_dir=utils.SFT_DIR,
-        per_device_eval_batch_size=16,
-        per_device_train_batch_size=4,
+        per_device_eval_batch_size=4 * per_device_train_batch_size,
+        per_device_train_batch_size=per_device_train_batch_size,
         report_to="wandb",
         save_steps=eval_steps,
         save_strategy="steps",
@@ -100,19 +100,41 @@ def main():
 
     def build_chat(sample):
         return {
-            "text": (
+            "prompt": (
                 "### TASK: Write a TL;DR summary for this Reddit post:\n\n"
                 f"{sample['prompt'].split('POST:')[-1].strip()}\n\n"
-                f"TL;DR: {sample['label']}"
-            )
+                f"TL;DR:"
+            ),
+            "target": sample["label"],
         }
 
-    train_dataset = train_dataset.map(
-        build_chat,
+    def tokenize_chat(sample):
+        full_text = sample["prompt"] + " " + sample["target"]
+        prompt_ids = tokenizer(sample["prompt"], add_special_tokens=False)["input_ids"]
+        full_enc = tokenizer(
+            full_text,
+            truncation=True,
+            max_length=utils.max_input_length,
+            padding="max_length",
+        )
+        input_ids = full_enc["input_ids"]
+        attention_mask = full_enc["attention_mask"]
+
+        labels = input_ids.copy()
+        labels[: len(prompt_ids)] = [-100] * len(prompt_ids)
+
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "labels": labels,
+        }
+
+    train_dataset = train_dataset.map(build_chat).map(
+        tokenize_chat,
         remove_columns=train_dataset.column_names,
     )
-    dev_dataset = dev_dataset.map(
-        build_chat,
+    dev_dataset = dev_dataset.map(build_chat).map(
+        tokenize_chat,
         remove_columns=dev_dataset.column_names,
     )
 

@@ -7,7 +7,7 @@ import utils
 
 
 def get_reward_score(prompt, summary):
-    input_text = prompt + summary
+    input_text = prompt.strip() + "\n" + summary.strip() + tokenizer.eos_token
     inputs = tokenizer(
         input_text,
         truncation=True,
