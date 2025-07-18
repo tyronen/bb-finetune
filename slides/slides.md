@@ -40,6 +40,36 @@ transition: fade-out
 
 ---
 
+# ChatGPT + PPO = How It Started...
+
+<img src="./images/MangaCreepy.png" alt="Creepy Manga" width="540" />
+
+---
+
+# After 2 Hours of Debugging,,,
+
+<img src="./images/SeriousGakuto.png" alt="Serious Face" width="540" />
+
+---
+
+# After 4 Hours of Debugging...
+
+<img src="./images/Gun.gif" alt="Suicide GIF" width="540" />
+
+---
+
+# After 6 Hours of Debugging...
+
+<img src="./images/Angry.gif" alt="Angry GIF" width="540" />
+
+---
+
+# How It Ended
+
+<img src="./images/" alt="UI Screenshot" width="540" />
+
+---
+
 <div style="text-align:center;">
   <h1 style="font-size:2rem;">
     <a href="http://65.109.84.92:7000/" target="_blank">🇨🇳 Str8 Outta China</a>
