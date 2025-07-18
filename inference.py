@@ -1,7 +1,8 @@
 import json
+import logging
 import os
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Tuple
 
 import openai
 import streamlit as st
@@ -20,71 +21,98 @@ st.set_page_config(
 )
 
 
+@st.cache_resource
+def load_models() -> Tuple[bool, Dict]:
+    """Load all three models - cached at the resource level"""
+    try:
+        device = utils.get_device()
+        models = {}
+
+        logging.info("Loading SFT tokenizer")
+        models["sft_tokenizer"] = AutoTokenizer.from_pretrained(utils.SFT_DIR)
+        logging.info("Loading SFT model")
+        models["sft_model"] = AutoModelForCausalLM.from_pretrained(utils.SFT_DIR).to(
+            device
+        )
+
+        logging.info("Loading reward tokenizer")
+        models["reward_tokenizer"] = AutoTokenizer.from_pretrained(utils.REWARD_DIR)
+        logging.info("Loading reward model")
+        models["reward_model"] = AutoModelForSequenceClassification.from_pretrained(
+            utils.REWARD_DIR
+        ).to(device)
+
+        logging.info("Loading PPO tokenizer")
+        models["ppo_tokenizer"] = AutoTokenizer.from_pretrained(utils.PPO_DIR)
+        logging.info("Loading PPO model")
+        models["ppo_model"] = AutoModelForCausalLM.from_pretrained(utils.PPO_DIR).to(
+            device
+        )
+
+        models["device"] = device
+
+        return True, models
+    except Exception as e:
+        logging.exception(str(e))
+        return False, {"error": str(e)}
+
+
 class ModelManager:
     def __init__(self):
-        self.sft_model = None
-        self.sft_tokenizer = None
-        self.reward_model = None
-        self.reward_tokenizer = None
-        self.ppo_model = None
-        self.ppo_tokenizer = None
         self.device = utils.get_device()
 
-    @st.cache_resource
-    def load_models(_self):
-        """Load all three models"""
-        try:
-            # Load SFT model
-            _self.sft_tokenizer = AutoTokenizer.from_pretrained(utils.SFT_DIR)
-            _self.sft_model = AutoModelForCausalLM.from_pretrained(utils.SFT_DIR).to(
-                _self.device
-            )
+    def initialize_models(self):
+        """Initialize models and store in session state"""
+        if "models_loaded" not in st.session_state:
+            st.session_state.models_loaded = False
+            st.session_state.models = {}
 
-            # Load reward model
-            _self.reward_tokenizer = AutoTokenizer.from_pretrained(utils.REWARD_DIR)
-            _self.reward_model = AutoModelForSequenceClassification.from_pretrained(
-                utils.REWARD_DIR
-            ).to(_self.device)
+        if not st.session_state.models_loaded:
+            success, models = load_models()
+            if success:
+                st.session_state.models = models
+                st.session_state.models_loaded = True
+                return True
+            else:
+                st.error(
+                    f"Error loading models: {models.get('error', 'Unknown error')}"
+                )
+                return False
+        return True
 
-            # Load PPO model
-            _self.ppo_tokenizer = AutoTokenizer.from_pretrained(utils.PPO_DIR)
-            _self.ppo_model = AutoModelForCausalLM.from_pretrained(utils.PPO_DIR).to(
-                _self.device
-            )
-
-            return True
-        except Exception as e:
-            st.error(f"Error loading models: {str(e)}")
-            return False
+    def get_models(self):
+        """Get models from session state"""
+        if st.session_state.get("models_loaded", False):
+            return st.session_state.models
+        return None
 
 
 class SummaryGenerator:
-    def __init__(self, model_manager: ModelManager):
-        self.model_manager = model_manager
+    def __init__(self, models: Dict):
+        self.models = models
 
     def format_reddit_post(self, post_text: str) -> str:
         """Format Reddit post text for summarization"""
-        # Simple formatting - just return the text as-is since user is pasting it
         return post_text.strip()
 
     def generate_sft_summary(self, post_text: str) -> str:
         """Generate summary using SFT model"""
         prompt = f"Summarize the following Reddit post:\n\n{post_text}\n\nSummary:"
 
-        inputs = self.model_manager.sft_tokenizer(
+        inputs = self.models["sft_tokenizer"](
             prompt, return_tensors="pt", max_length=1024, truncation=True
-        ).to(self.model_manager.device)
+        ).to(self.models["device"])
 
         with torch.no_grad():
-            outputs = self.model_manager.sft_model.generate(
+            outputs = self.models["sft_model"].generate(
                 inputs.input_ids,
                 max_new_tokens=150,
                 temperature=0.7,
                 do_sample=True,
-                pad_token_id=self.model_manager.sft_tokenizer.eos_token_id,
+                pad_token_id=self.models["sft_tokenizer"].eos_token_id,
             )
 
-        summary = self.model_manager.sft_tokenizer.decode(
+        summary = self.models["sft_tokenizer"].decode(
             outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True
         )
         return summary.strip()
@@ -93,38 +121,35 @@ class SummaryGenerator:
         """Generate summary using PPO model"""
         prompt = f"Summarize the following Reddit post:\n\n{post_text}\n\nSummary:"
 
-        inputs = self.model_manager.ppo_tokenizer(
+        inputs = self.models["ppo_tokenizer"](
             prompt, return_tensors="pt", max_length=1024, truncation=True
-        ).to(self.model_manager.device)
+        ).to(self.models["device"])
 
         with torch.no_grad():
-            outputs = self.model_manager.ppo_model.generate(
+            outputs = self.models["ppo_model"].generate(
                 inputs.input_ids,
                 max_new_tokens=150,
                 temperature=0.7,
                 do_sample=True,
-                pad_token_id=self.model_manager.ppo_tokenizer.eos_token_id,
+                pad_token_id=self.models["ppo_tokenizer"].eos_token_id,
             )
 
-        summary = self.model_manager.ppo_tokenizer.decode(
+        summary = self.models["ppo_tokenizer"].decode(
             outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True
         )
         return summary.strip()
 
     def get_reward_score(self, post_text: str, summary: str) -> float:
         """Get reward score for a summary"""
-        # Format similar to how the reward model was trained
         input_text = f"Post: {post_text}\nSummary: {summary}"
 
-        inputs = self.model_manager.reward_tokenizer(
+        inputs = self.models["reward_tokenizer"](
             input_text, return_tensors="pt", max_length=512, truncation=True
-        ).to(self.model_manager.device)
+        ).to(self.models["device"])
 
         with torch.no_grad():
-            outputs = self.model_manager.reward_model(**inputs)
-            score = torch.softmax(outputs.logits, dim=-1)[0][
-                1
-            ].item()  # Assuming positive class is index 1
+            outputs = self.models["reward_model"](**inputs)
+            score = outputs.logits.squeeze().item()
 
         return score
 
@@ -162,7 +187,7 @@ class PublicModelAPI:
     ) -> Dict:
         """Have ChatGPT compare the two summaries and pick the better one"""
         try:
-            prompt = f"""Given the following Reddit post, please evaluate which of the two summaries is better and explain why.
+            prompt = f"""Given the following Reddit post, please evaluate which of the two summaries is better.
 
 Reddit Post:
 {post_text}
@@ -173,9 +198,9 @@ Summary A (SFT Model):
 Summary B (PPO Model):
 {ppo_summary}
 
-Please analyze both summaries and respond with:
+Please analyze both summaries and respond with
 1. Which summary is better (A or B)
-2. A brief explanation of why it's better
+2. A very brief explanation of why it's better
 
 Focus on accuracy, completeness, clarity, and how well each summary captures the key points of the original post."""
 
@@ -198,17 +223,11 @@ Focus on accuracy, completeness, clarity, and how well each summary captures the
             response_text = response.choices[0].message.content.strip()
 
             # Try to parse which summary was chosen
-            if (
-                    "Summary A" in response_text
-                    or "A is better" in response_text
-                    or "choose A" in response_text
-            ):
+            if "Neither Summary A nor Summary B is better" in response_text:
+                winner = "Unclear"
+            elif "Summary A is better" in response_text or "choose A" in response_text:
                 winner = "SFT"
-            elif (
-                    "Summary B" in response_text
-                    or "B is better" in response_text
-                    or "choose B" in response_text
-            ):
+            elif "Summary B is better" in response_text or "choose B" in response_text:
                 winner = "PPO"
             else:
                 # If we can't parse, look for model names
@@ -222,11 +241,13 @@ Focus on accuracy, completeness, clarity, and how well each summary captures the
             return {"winner": winner, "explanation": response_text}
 
         except Exception as e:
+            logging.exception(str(e))
             st.error(f"Error with ChatGPT API: {str(e)}")
             return {"winner": "Error", "explanation": "Error generating comparison"}
 
 
 def main():
+    utils.setup_logging()
     st.title("🤖 Reddit Summary Model Comparison")
     st.write(
         "Compare SFT, PPO, and Reward Model performance on Reddit post summarization"
@@ -241,6 +262,7 @@ def main():
         public_api.setup_openai()
         st.sidebar.success("✅ OpenAI API key loaded from environment")
     except ValueError as e:
+        logging.exception(str(e))
         st.sidebar.error(f"❌ {str(e)}")
         st.error(
             "Please set the OPENAI_API_KEY environment variable to use ChatGPT comparison"
@@ -249,12 +271,19 @@ def main():
     # Sidebar for configuration
     st.sidebar.title("Configuration")
 
+    # Display model status
+    if st.session_state.get("models_loaded", False):
+        st.sidebar.success("✅ Models loaded successfully")
+    else:
+        st.sidebar.warning("⚠️ Models not loaded")
+
     # Load models button
     if st.sidebar.button("Load Models"):
         with st.spinner("Loading models..."):
-            success = model_manager.load_models()
+            success = model_manager.initialize_models()
             if success:
                 st.success("Models loaded successfully!")
+                st.rerun()  # Refresh to update sidebar status
             else:
                 st.error("Failed to load models")
 
@@ -265,8 +294,10 @@ def main():
     st.subheader("Enter Reddit Post Content")
     reddit_post_text = st.text_area(
         "Paste the Reddit post content here:",
+        value=st.session_state.get("reddit_post_text", ""),
         height=200,
         placeholder="Paste the title, body text, and any relevant comments from a Reddit post here...",
+        key="post_input",
     )
 
     # Optional: Add some example posts
@@ -324,26 +355,30 @@ Top comments:
 
     if selected_example != "None":
         if st.button("Load Example"):
-            reddit_post_text = example_posts[selected_example]
+            st.session_state.reddit_post_text = example_posts[selected_example]
             st.rerun()
+
+    # Use session state for text area if example was loaded
+    if "reddit_post_text" in st.session_state and selected_example != "None":
+        reddit_post_text = st.session_state.reddit_post_text
 
     if st.button("Analyze Post") and reddit_post_text:
         if not os.getenv("OPENAI_API_KEY"):
             st.error("Please set the OPENAI_API_KEY environment variable")
             return
 
-        if not all(
-                [
-                    model_manager.sft_model,
-                    model_manager.reward_model,
-                    model_manager.ppo_model,
-                ]
-        ):
+        if not st.session_state.get("models_loaded", False):
             st.error("Please load models first using the sidebar")
             return
 
+        # Get models from session state
+        models = model_manager.get_models()
+        if not models:
+            st.error("Models not available. Please reload models.")
+            return
+
         # Initialize summary generator
-        summary_generator = SummaryGenerator(model_manager)
+        summary_generator = SummaryGenerator(models)
 
         # Display post info
         st.subheader("Post Information")
@@ -397,7 +432,8 @@ Top comments:
             )
 
         st.write(f"**ChatGPT's Choice:** {chatgpt_comparison['winner']}")
-        st.write(f"**Explanation:** {chatgpt_comparison['explanation']}")
+        st.write(f"**Explanation:** ")
+        st.write(f"{chatgpt_comparison['explanation']}")
 
         # Final comparison table
         st.subheader("Final Results")

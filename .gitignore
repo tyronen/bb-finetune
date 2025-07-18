@@ -1,7 +1,7 @@
 # new ignores
 ben_dev/data/
 ben_dev/models/
-
+data/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

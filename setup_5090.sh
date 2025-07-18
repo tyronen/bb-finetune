@@ -13,13 +13,14 @@ export FLASH_ATTN_CUDA_ARCHS=120          # just Blackwell
 export MAX_JOBS=8                         # ninja job slots  (keeps RAM down)
 export NVCC_THREADS=8                     # threads per nvcc compile
 export NINJAFLAGS="-j8"
+export TMPDIR=/dev/shm
 #fallocate -l 32G /swap && mkswap /swap && swapon /swap
 # 3  Build & install against the Torch that’s already in the venv
-python -m pip install -v --no-build-isolation .
+# python -m pip install -v --no-build-isolation .
 
 # 4  Quick import test
-python - <<'PY'
-import torch, flash_attn_cuda
-print("Flash-Attention OK on", torch.version.cuda,
-      "with", torch.cuda.get_device_name(0))
-PY
+#python - <<'PY'
+#import torch, flash_attn_cuda
+#print("Flash-Attention OK on", torch.version.cuda,
+#      "with", torch.cuda.get_device_name(0))
+#PY

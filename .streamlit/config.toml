@@ -1,0 +1,7 @@
+[server]
+headless = true
+enableWebsocketCompression = false
+enableCORS = false
+enableXsrfProtection = false
+port = 7860
+address = "0.0.0.0"
