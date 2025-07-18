@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from accelerate import PartialState
 from datasets import load_dataset
+from peft import PeftModel
 from transformers import (
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
@@ -22,6 +23,7 @@ from trl.trainer.utils import SIMPLE_CHAT_TEMPLATE
 
 sft_model_path = "./qwen-sft-instruct-checkpoint/merged"
 reward_model_path = "Skywork/Skywork-Reward-V2-Qwen3-0.6B"
+base_model = "Qwen/Qwen3-0.6B-Base" 
 output_dir = "./qwen-ppo-rlhf-checkpoint"
 dataset_name = "OpenAssistant/oasst1"
 dataset_split = "train"
@@ -33,7 +35,7 @@ per_device_train_batch_size = 1
 gradient_accumulation_steps = 1
 learning_rate = 3e-6
 num_ppo_epochs = 1
-total_episodes = 10000
+total_episodes = 1500
 
 # ================================
 
@@ -142,5 +144,13 @@ trainer.train()
 
 trainer.save_model(output_dir)
 trainer.generate_completions()
-
 print("PPO RLHF Qwen3 training complete! Model saved to:", output_dir)
+
+base_model = AutoModelForCausalLM.from_pretrained(base_model, trust_remote_code=True)
+final_peft = PeftModel.from_pretrained(base_model, output_dir)
+
+merged = final_peft.merge_and_unload()
+merged.save_pretrained("./qwen-ppo-rlhf-checkpoint/merged", safe_serialization=True)
+tokenizer.save_pretrained("./qwen-ppo-rlhf-checkpoint/merged")
+
+print("Merged full model (for direct inference) saved to ./qwen-ppo-rlhf-checkpoint/merged")
