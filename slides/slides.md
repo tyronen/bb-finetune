@@ -120,6 +120,12 @@ transition: slide-left
 transition: slide-left
 ---
 
+<img src="./images/SFT-PPO.png" alt="SFT-PPO" width="540" />
+
+---
+transition: slide-left
+---
+
 <h1 style="font-size:2rem;">
   <a href="http://65.109.84.92:7000/" target="_blank">🇨🇳 Str8 Outta China</a>
 </h1>
@@ -189,7 +195,7 @@ transition: slide-left
 - "JAX is blazingly fast once it’s working"
 - Will I carry on with it? Probably not in the near term
 
-<img src="./images/ben_boxing.png" alt="PyTorch vs JAX" width="540" />
+<img src="./images/ben_boxing.png.png" alt="PyTorch vs JAX" width="540" />
 
 ---
 transition: slide-left
