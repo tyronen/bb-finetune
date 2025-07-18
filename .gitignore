@@ -2,6 +2,7 @@
 ben_dev/data/
 ben_dev/models/
 data/
+.DS_Store
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
