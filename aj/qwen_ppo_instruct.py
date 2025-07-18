@@ -37,9 +37,6 @@ total_episodes = 10000
 
 # ================================
 
-if os.path.exists(output_dir):
-    shutil.rmtree(output_dir)
-
 # -- ModelConfig --
 model_args = ModelConfig(
     model_name_or_path=sft_model_path,
@@ -56,8 +53,8 @@ ppo_args = PPOConfig(
     total_episodes=total_episodes,
     num_ppo_epochs=num_ppo_epochs,
     logging_steps=100,
-    fp16=False,
-    bf16=True,
+    fp16=True,
+    bf16=False,
     batch_size=1,              # PPO batch size (outer loop)
     mini_batch_size=1,          # PPO mini batch (for advantage estimation)
     whiten_rewards=False,       # Most RLHF doesn't whiten
@@ -74,6 +71,7 @@ ppo_args = PPOConfig(
     save_strategy="steps",   # or "epoch" if you want to save every epoch
     save_steps=1000,          # save every 250 steps, adjust as desired
     save_total_limit=3,      # keep last 3 checkpoints (optional)
+    resume_from_checkpoint=True,
 )
 
 # ========== MODEL AND TOKENIZER LOADING =========
