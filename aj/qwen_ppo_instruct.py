@@ -47,6 +47,7 @@ model_args = ModelConfig(
 # -- PPOConfig --
 ppo_args = PPOConfig(
     output_dir=output_dir,
+    resume_from_checkpoint="/qwen-ppo-rlhf-checkpoint/checkpoint-1000",
     per_device_train_batch_size=per_device_train_batch_size,
     gradient_accumulation_steps=gradient_accumulation_steps,
     learning_rate=learning_rate,
@@ -71,7 +72,6 @@ ppo_args = PPOConfig(
     save_strategy="steps",   # or "epoch" if you want to save every epoch
     save_steps=1000,          # save every 250 steps, adjust as desired
     save_total_limit=3,      # keep last 3 checkpoints (optional)
-    resume_from_checkpoint=True,
 )
 
 # ========== MODEL AND TOKENIZER LOADING =========
