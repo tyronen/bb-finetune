@@ -82,13 +82,11 @@ transition: slide-right
 transition: slide-right
 ---
 
-<div style="text-align:center;">
-  <h1 style="font-size:2rem;">
-    <a href="http://65.109.84.92:7000/" target="_blank">🇨🇳 Str8 Outta China</a>
-  </h1>
-  <a href="http://65.109.84.92:7000/" target="_blank">
-    <img src="./images/AJ_UI.png" alt="UI Screenshot" width="540" />
-  </a>
-</div>
+<h1 style="font-size:2rem;">
+  <a href="http://65.109.84.92:7000/" target="_blank">🇨🇳 Str8 Outta China</a>
+</h1>
+<a href="http://65.109.84.92:7000/" target="_blank">
+  <img src="./images/AJ_UI.png" alt="UI Screenshot" width="540" />
+</a>
 
 ---
