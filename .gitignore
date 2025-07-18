@@ -1,8 +1,10 @@
 # new ignores
 ben_dev/data/
 ben_dev/models/
-data/
-.DS_Store
+ben_dev/outputs/
+ben_dev/misc/wandb/
+ben_dev/misc/EasyDeL-Checkpoints/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

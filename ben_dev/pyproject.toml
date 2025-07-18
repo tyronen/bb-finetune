@@ -39,6 +39,10 @@ dependencies = [
   "jax[cuda12]>=0.4.5", # will also pull jaxlib from the cuda version
   "flax",
   "optax",
+  "easydel==0.1.4.1",
+  "tensorflow",
+
+
 
   # 8‑bit & speedups (optional)
   "bitsandbytes",

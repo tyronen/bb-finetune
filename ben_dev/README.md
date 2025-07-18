@@ -85,6 +85,8 @@ Whenever you need to add a new package:
    ```bash
    uv pip compile pyproject.toml --output-file uv.lock
    uv pip sync uv.lock
+   # Check package installed (e.g numpy):
+   uv pip show numpy
    ```
 
 ---
