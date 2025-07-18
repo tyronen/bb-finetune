@@ -20,6 +20,10 @@ st.set_page_config(
     page_title="Reddit Summary Model Comparison", page_icon="🤖", layout="wide"
 )
 
+SFT_DIR = "data/oldsft"
+REWARD_DIR = "data/smallreward"
+PPO_DIR = "data/oldppo"
+
 
 @st.cache_resource
 def load_models() -> Tuple[bool, Dict]:

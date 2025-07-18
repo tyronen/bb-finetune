@@ -1,3 +1,5 @@
+import time
+
 import torch
 import wandb
 from datasets import load_dataset
@@ -10,6 +12,8 @@ from transformers import (
 from trl import SFTConfig, SFTTrainer
 
 import utils
+
+scaling_factor = 40
 
 
 class CustomTrainer(SFTTrainer):
@@ -47,6 +51,18 @@ def main():
     model.resize_token_embeddings(len(tokenizer))  # adjust token count
     model.config.pad_token_id = tokenizer.eos_token_id
 
+    per_device_train_batch_size = 4
+    gradient_accumulation_steps = 2
+    all_possible_steps = 116722
+    steps_per_epoch = (
+            all_possible_steps
+            // scaling_factor
+            // per_device_train_batch_size
+            // gradient_accumulation_steps
+    )
+    eval_steps = steps_per_epoch // 8
+    logging_steps = eval_steps // 2
+    warmup_steps = max(200, eval_steps)
     training_args = SFTConfig(
         adam_beta1=0.9,
         adam_beta2=0.95,
@@ -56,46 +72,40 @@ def main():
         dataloader_pin_memory=True,
         eval_accumulation_steps=1,
         eval_strategy="steps",
-        eval_steps=500,
-        gradient_accumulation_steps=2,
+        eval_steps=eval_steps,
+        gradient_accumulation_steps=gradient_accumulation_steps,
         learning_rate=2e-4,
         load_best_model_at_end=True,
         log_level="info",
-        logging_steps=50,
-        lr_scheduler_kwargs={"min_lr": 1e-6},
-        lr_scheduler_type="cosine_with_min_lr",
-        max_steps=3000,
+        logging_steps=logging_steps,
+        lr_scheduler_type="constant_with_warmup",
+        max_steps=steps_per_epoch,
         max_length=utils.max_input_length,
         optim="adamw_torch_fused",  # fused optimiser
         output_dir=utils.SFT_DIR,
         per_device_eval_batch_size=16,
         per_device_train_batch_size=4,
         report_to="wandb",
-        save_steps=1000,
+        save_steps=eval_steps,
         save_strategy="steps",
         warmup_ratio=0.05,
-        warmup_steps=200,
+        warmup_steps=warmup_steps,
         weight_decay=0.01,
     )
 
     train_dataset = load_dataset("CarperAI/openai_summarize_tldr", split="train")
+    train_dataset = train_dataset.select(range(len(train_dataset) // scaling_factor))
     dev_dataset = load_dataset("CarperAI/openai_summarize_tldr", split="valid")
-    dev_dataset = dev_dataset.select(range(min(2000, len(dev_dataset))))
+    dev_dataset = dev_dataset.select(range(len(dev_dataset) // scaling_factor))
 
-    # --- build the chat prompt once -----------------------------------
     def build_chat(sample):
-        messages = [
-            {
-                "role": "system",
-                "content": "You are a helpful assistant that summarizes text.",
-            },
-            {
-                "role": "user",
-                "content": f"Summarize the following text:\n\n{sample['prompt']}",
-            },
-            {"role": "assistant", "content": sample["label"]},
-        ]
-        return {"text": tokenizer.apply_chat_template(messages, tokenize=False)}
+        return {
+            "text": (
+                "### TASK: Write a TL;DR summary for this Reddit post:\n\n"
+                f"{sample['prompt'].split('POST:')[-1].strip()}\n\n"
+                f"TL;DR: {sample['label']}"
+            )
+        }
 
     train_dataset = train_dataset.map(
         build_chat,
@@ -120,7 +130,10 @@ def main():
             )
         ],
     )
+    start = time.time()
     trainer.train()
+    end = time.time()
+    print(f"WALL CLOCK training time: {end - start:.2f} seconds")
     model = model.merge_and_unload()
     model.save_pretrained(utils.SFT_DIR)
     tokenizer.save_pretrained(utils.SFT_DIR)
