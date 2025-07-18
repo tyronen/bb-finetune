@@ -25,10 +25,18 @@ except ImportError:
     print("   Or set environment variables manually")
 
 # Configure WandB if API key is provided
-if os.getenv('WANDB_API_KEY'):
-    print(f"✅ WandB API key found, will log to project: {os.getenv('WANDB_PROJECT', 'easydel-lora-gpt2')}")
+wandb_api_key = os.getenv('WANDB_API_KEY')
+if wandb_api_key:
+    try:
+        import wandb
+        wandb.login(key=wandb_api_key)
+        print(f"✅ WandB authenticated successfully, will log to project: {os.getenv('WANDB_PROJECT', 'easydel-lora-gpt2')}")
+    except Exception as e:
+        print(f"⚠️  WandB authentication failed: {e}")
+        print("   Training will continue without WandB logging")
 else:
     print("⚠️  No WandB API key found. Set WANDB_API_KEY in .env file or environment")
+    print("   Training will continue without WandB logging")
 
 # JAX memory optimization - prevent pre-allocation
 os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'
