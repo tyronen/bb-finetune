@@ -4,6 +4,7 @@ ben_dev/models/
 ben_dev/outputs/
 ben_dev/misc/wandb/
 ben_dev/misc/EasyDeL-Checkpoints/
+.env/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
